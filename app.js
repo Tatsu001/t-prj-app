@@ -140,8 +140,7 @@
     const seg = `<div class="seg">${SCENES.map(([k, n]) => `<a href="#today/${k}" class="${k === scene ? 'on' : ''}">${n}</a>`).join('')}</div>`;
     const body = { pre: scenePre, noon: sceneNoon, post: scenePost, week: sceneWeek, month: sceneMonth }[scene](st, od, today);
     return shell(`<h1>${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）</h1>${seg}${body}
-<section><h2>最近の変更</h2><div id="changes-box" class="changes"><p class="empty">読み込み中</p></div><p class="more"><a href="#changes">すべて見る</a></p></section>
-<p class="foot"><a href="#settings">設定</a></p>`);
+<p class="foot"><a href="#changes">変更の履歴</a>　<a href="#settings">設定</a></p>`);
   }
   function verdict(st) {
     const q11 = Calc.nums(data['問い'], 11);
@@ -348,7 +347,7 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
 <section><div class="bar"><h2>原則</h2>${pEdit ? '<button class="b quiet" data-act="cancel">閉じる</button>' : '<button class="b quiet" data-act="edit-principles">編集</button>'}</div>${principles}</section>
 <section><h2>前提</h2>${preForm}</section>
 <section><div class="bar"><h2>改定履歴</h2><button class="b" data-act="edit-hist">追加</button></div>${hForm}${hist.length ? `<div class="rows">${hist.map(histRow).join('')}</div>` : '<p class="empty">なし</p>'}</section>
-<p class="foot"><a href="#settings">設定</a></p>`);
+<p class="foot"><a href="#changes">変更の履歴</a>　<a href="#settings">設定</a></p>`);
   }
   function histRow(h) {
     let chg = E(h['変更']);
@@ -463,7 +462,7 @@ ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改�
   }
   async function after() {
     const box = document.getElementById('changes-box');
-    if (box) { try { const list = await commits(); box.innerHTML = changesHtml(list, route()[0] === 'changes' ? 0 : 5); } catch (e) { box.innerHTML = '<p class="empty">取れなかった</p>'; } }
+    if (box) { try { const list = await commits(); box.innerHTML = changesHtml(list, 0); } catch (e) { box.innerHTML = '<p class="empty">取れなかった</p>'; } }
     const doc = document.getElementById('doc-box');
     if (doc) { try { const t = await readText(doc.dataset.path); doc.innerHTML = mdToHtml(t, doc.dataset.path); window.scrollTo(0, 0); } catch (e) { doc.innerHTML = `<p class="empty">${E(e.message)}</p>`; } }
   }
