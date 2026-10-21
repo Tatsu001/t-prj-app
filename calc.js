@@ -39,10 +39,10 @@
   const soldQty = (t) => (t['売り'] || []).reduce((a, s) => a + (s['株数'] || 0), 0);
   const remQty = (t) => (t['約定株数'] || 0) - soldQty(t);
   function state(t) {
-    if (!t['約定日']) return t['記録日'] ? '発注待ち' : '';
+    if (!t['約定日']) return t['記録日'] ? '注文中' : '';
     if (t['状態'] === '取消') return '取消';
     if (remQty(t) <= 0) return '決済済み';
-    return soldQty(t) > 0 ? '一部売却' : '保有中';
+    return soldQty(t) > 0 ? '一部利確' : '保有中';
   }
   const closeDate = (t) => (state(t) === '決済済み' ? t['売り'].map((s) => s['日付']).sort().slice(-1)[0] : null);
   const rValue = (t) => { const p = pl(t); return p == null ? null : p / ((t['約定価格'] - t['損切り価格']) * t['約定株数']); };
@@ -60,8 +60,8 @@
     if (cash < pre['停止残高'] || dd >= q11['段階3_pct'] / 100) stage = '停止';
     else if (dd >= q11['段階2_pct'] / 100) stage = '段階2';
     else if (dd >= q11['段階1_pct'] / 100) stage = '段階1';
-    const held = trades.filter((t) => ['保有中', '一部売却'].includes(state(t)));
-    const waiting = trades.filter((t) => state(t) === '発注待ち');
+    const held = trades.filter((t) => ['保有中', '一部利確'].includes(state(t)));
+    const waiting = trades.filter((t) => state(t) === '注文中');
     let openRisk = 0;
     held.forEach((t) => { openRisk += (t['約定価格'] - t['損切り価格']) * remQty(t); });
     waiting.forEach((t) => { openRisk += (t['発注価格'] - t['損切り価格']) * (t['株数'] || 0); });
@@ -70,7 +70,18 @@
     const lossToday = closed.some((x) => x.c === today && x.pl < 0);
     const prevBd = iso(cal.workday(T, -1));
     const lossPrev = closed.some((x) => x.c === prevBd && x.pl < 0);
+    // 地合い：引け後に人が答えた値（data/地合い.json）。当日か前営業日の分だけ有効。無ければ未確認（止めない）
+    const q10 = nums(qs, 10);
+    const mk = (data['地合い'] || []).filter((x) => x['日付'] <= today).sort((a, b) => (a['日付'] < b['日付'] ? -1 : 1)).slice(-1)[0];
+    const market = { date: mk ? mk['日付'] : null, ok: null, text: '未確認', bad: [] };
+    if (mk && (mk['日付'] === today || mk['日付'] === prevBd)) {
+      if (mk['指数25日線'] === '×') market.bad.push('指数が' + (q10['移動平均_日'] || 25) + '日線の下');
+      if (mk['先物夜間'] === '×') market.bad.push('先物夜間が−' + (q10['先物夜間_pct'] || 2) + '%超');
+      market.ok = market.bad.length === 0;
+      market.text = (market.ok ? '○' : market.bad.join('、')) + '（' + mk['日付'].slice(5).replace('-', '/') + '）';
+    }
     const reasons = [];
+    if (market.ok === false) reasons.push('地合い：' + market.bad.join('、'));
     if (stage === '停止') reasons.push('取引停止（50万円割れ または 最高額から半減）');
     if (stage === '段階2') reasons.push('新規買い停止（最高額から' + q11['段階2_pct'] + '%減）');
     if (lossToday) reasons.push('損切り当日');
@@ -83,7 +94,7 @@
       today, cash: Math.round(cash), peak: Math.round(peak), ddPct: Math.round(dd * 1000) / 10, stage,
       held: held.length, heldMax: q9['同時保有上限'], waiting: waiting.length,
       openRiskPct: Math.round(openRisk / pre['月初資金'] * 1000) / 10, openRiskMax: q9['合計リスク上限_pct'],
-      streak, lossToday, lot, ok: reasons.length === 0, reasons,
+      streak, lossToday, lossPrev, lot, market, ok: reasons.length === 0, reasons,
     };
   }
 
@@ -132,12 +143,12 @@
     const out = { new: [], hold: [] };
     trades.forEach((t) => {
       const s = state(t);
-      if (s === '発注待ち') {
+      if (s === '注文中') {
         const o = (byName(qs, 4, t['注文']) || adopted(qs, 4) || {})['数値欄'] || {};
         const age = cal.bdays(d(t['記録日']), T);
         out.new.push({ t, buy: { kind: '逆指値買い', price: t['発注価格'], qty: t['株数'] }, stop: { kind: '逆指値売り（損切り）', price: t['損切り価格'], qty: t['株数'] },
           note: t['型'] + '。' + (o['取消_営業日'] ? o['取消_営業日'] + '営業日で約定しなければ取消' : ''), expired: o['取消_営業日'] ? age >= o['取消_営業日'] : false });
-      } else if (s === '保有中' || s === '一部売却') {
+      } else if (s === '保有中' || s === '一部利確') {
         const limit = deadline(data, t);
         const left = cal.bdays(T, limit);
         const tp = (byName(qs, 6, t['利確']) || adopted(qs, 6) || {})['数値欄'] || {};
@@ -184,7 +195,7 @@
     const fs = require('fs'), path = require('path');
     const dir = path.join(__dirname, '..', 'data');
     const load = (n) => JSON.parse(fs.readFileSync(path.join(dir, n + '.json'), 'utf8'));
-    const data = { 前提: load('前提'), 問い: load('問い'), 取引: load('取引'), 候補: load('候補') };
+    const data = { 前提: load('前提'), 問い: load('問い'), 取引: load('取引'), 候補: load('候補'), 地合い: fs.existsSync(path.join(dir, '地合い.json')) ? load('地合い') : [] };
     const [cmd, ...a] = process.argv.slice(2);
     const today = (a.find((x) => /^\d{4}-\d{2}-\d{2}$/.test(x))) || new Date().toISOString().slice(0, 10);
     let res;
