@@ -90,7 +90,7 @@ nav.tabs a.on{color:var(--accent);font-weight:600;box-shadow:inset 0 2px 0 var(-
 .doc{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:15px;line-height:1.75;overflow-wrap:anywhere}
 .doc h2{font-size:20px;color:var(--fg);letter-spacing:0;margin:0 0 12px} .doc h3{font-size:17px;margin:22px 0 8px} .doc h4{font-size:15px;color:var(--fg);margin:16px 0 6px} .doc h5{font-size:14px;margin:12px 0 4px}
 .doc p{margin:0 0 10px} .doc ul,.doc ol{margin:0 0 10px;padding-left:1.4em} .doc li{margin:3px 0}
-.doc table{border-collapse:collapse;width:100%;font-size:14px;margin:0 0 12px} .doc th,.doc td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top} .doc th{font-size:12px;color:var(--muted)} .doc td:first-child{min-width:5em}
+.doc table{border-collapse:collapse;width:100%;font-size:14px;margin:0 0 12px} .doc th,.doc td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top} .doc th{font-size:12px;color:var(--muted)} .doc td:first-child{min-width:3em}
 .doc pre{background:var(--bg);padding:10px;border-radius:6px;overflow-x:auto;font-size:13px} .doc code{background:var(--bg);padding:1px 4px;border-radius:4px;font-size:13px}
 .doc blockquote{margin:0 0 10px;padding-left:12px;border-left:3px solid var(--line);color:var(--muted)} .doc hr{border:0;border-top:1px solid var(--line);margin:16px 0}
 .scroll{overflow-x:auto}
