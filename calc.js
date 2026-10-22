@@ -197,7 +197,9 @@
     const load = (n) => JSON.parse(fs.readFileSync(path.join(dir, n + '.json'), 'utf8'));
     const data = { 前提: load('前提'), 問い: load('問い'), 取引: load('取引'), 候補: load('候補'), 地合い: fs.existsSync(path.join(dir, '地合い.json')) ? load('地合い') : [] };
     const [cmd, ...a] = process.argv.slice(2);
-    const today = (a.find((x) => /^\d{4}-\d{2}-\d{2}$/.test(x))) || new Date().toISOString().slice(0, 10);
+    // 日本時間の日付。コンテナの時計はUTCなので、朝9時前は前日になってしまう
+    const jst = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    const today = (a.find((x) => /^\d{4}-\d{2}-\d{2}$/.test(x))) || jst;
     let res;
     if (cmd === 'status') res = status(data, today);
     else if (cmd === 'size') res = size(data, Number(a[0]), Number(a[1]), a[2] || '通常', today);
