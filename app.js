@@ -319,16 +319,16 @@ ${sec(`決済済み ${closed.length}`, closed)}${other.length ? sec('取消', ot
     const ruleSum = ['型', '注文', '利確', '期限'].map((k) => t[k]).filter(Boolean).join('・');
     const q4 = Calc.nums(data['問い'], 4, t['区分']);
     const h = holding ? (Calc.orders(data, todayISO()).hold.find((x) => x.t === t) || {}) : {};
-    const evSel = `<label class="f"><span>イベント</span><select name="イベント種別">${[['', '—'], ['決算', '決算発表'], ['解除', 'ロックアップ解除']].map(([v, l]) => `<option value="${v}" ${(t['イベント種別'] || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+    const evSel = `<label class="f span"><span>イベント</span><select name="イベント種別">${[['', '—'], ['決算', '決算発表'], ['解除', 'ロックアップ解除']].map(([v, l]) => `<option value="${v}" ${(t['イベント種別'] || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
     return shell(`<h1>${i >= 0 ? E(t['銘柄名'] || '取引') : '取引を追加'}${s ? ' ' + pill(s) : ''}</h1>
 <form id="f-trade" data-i="${i}">
 ${grp('銘柄', !s, fld('コード', 'コード', t['コード']) + fld('銘柄名', '銘柄名', t['銘柄名']) + fld('区分', '区分', t['区分'], { type: 'select', options: ['通常', 'IPO'] }), s ? `${t['コード']} ${t['銘柄名']}　${t['区分']}` : '')}
 ${grp('使うルール', !s, ['型', '注文', '利確', '期限'].map(rule).join(''), s ? ruleSum : '')}
 ${grp('発注', !s || s === '注文中', fld('型が出た日', '記録日', t['記録日'], { type: 'date' }) + fld('基準価格', '基準価格', t['基準価格'], { type: 'number' }) + fld('損切り価格', '損切り価格', t['損切り価格'], { type: 'number' }) + fld('発注価格', '発注価格', t['発注価格'], { type: 'number', ph: `空欄なら 基準価格 +${q4['乖離_pct'] || 1}%` }) + fld('株数', '株数', t['株数'], { type: 'number' }) + `<div class="btns span"><button class="b" data-act="calc-trade" type="button">発注価格と株数を計算</button></div>${calcBox ? `<div class="span">${calcBox}</div>` : ''}` + (s === '注文中' || s === '取消' ? `<label class="chk span"><input type="checkbox" name="取消" ${t['状態'] === '取消' ? 'checked' : ''}> この注文を取消にする</label>` : ''), s && s !== '注文中' ? `${dShort(t['記録日'])}　${yen(t['発注価格'])}円 × ${t['株数']}株　損切り ${yen(t['損切り価格'])}円` : '')}
 ${grp('約定', s === '注文中', fld('約定日', '約定日', t['約定日'], { type: 'date' }) + fld('約定価格', '約定価格', t['約定価格'], { type: 'number' }) + fld('約定株数', '約定株数', t['約定株数'], { type: 'number' }), holding || s === '決済済み' ? `${dShort(t['約定日'])}　${yen(t['約定価格'])}円 × ${t['約定株数']}株` : '')}
-${grp('期限', holding, `<div class="f"><span>期限日</span><div class="ro">${h.limit ? `${E(dShort(h.limit))}（あと${h.left}営業日）` : '—'}</div></div>` + fld('イベント日', 'イベント日', t['イベント日'], { type: 'date' }) + evSel)}
+${grp('期限', holding, `<div class="f"><span>期限日</span><div class="ro">${h.limit ? `${E(dShort(h.limit))}（あと${h.left}営業日）` : '—'}</div></div>` + fld('イベント日', 'イベント日', t['イベント日'], { type: 'date' }) + evSel, holding ? `${h.limit ? dShort(h.limit) : ''}${t['イベント日'] ? `　${t['イベント種別'] === '解除' ? 'ロックアップ解除' : '決算発表'} ${dShort(t['イベント日'])}` : ''}` : '')}
 ${grp('売り', holding, sell(0) + sell(1))}
-${grp('AIの根拠とメモ', holding || s === '決済済み', fld('AIの根拠', 'AIの判定', t['AIの判定']) + `<label class="f span"><span>メモ</span><textarea name="メモ" rows="2">${E(t['メモ'])}</textarea></label>`)}
+${grp('AIの根拠とメモ', holding || s === '決済済み', `<label class="f span"><span>AIの根拠</span><input name="AIの判定" value="${E(t['AIの判定'])}"></label>` + `<label class="f span"><span>メモ</span><textarea name="メモ" rows="2">${E(t['メモ'])}</textarea></label>`)}
 <input type="hidden" name="id" value="${t.id}">
 <div class="btns"><button class="b primary" data-act="save-trade">保存</button><a class="b quiet" href="#trades">戻る</a>${i >= 0 ? '<button class="b quiet danger" data-act="del-trade" type="button">削除</button>' : ''}</div></form>`);
   }
