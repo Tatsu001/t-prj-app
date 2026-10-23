@@ -384,23 +384,23 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
     const add = edit && edit.type === 'strategy' && edit.q === q.num && edit.idx === -1 ? strategyForm(q, blankStrategy(q), -1) : `<div class="btns"><button class="b" data-act="edit-strategy" data-q="${q.num}" data-i="-1">追加</button></div>`;
     return shell(`<h1 class="qh">${sel}</h1><p class="lead">${E(q.question)}</p>${defs}<p class="adopt">採用中　${E(adoptedText(q))}</p><section>${cards}${add}</section>`);
   }
-  const blankStrategy = (q) => ({ name: '', '状態': '代替案', '改定日': todayISO(), '区分': '共通', '一言で': '', '当てはまる条件': [], 'しないこと': [], '兼業での実行手順': '', '出典': '', '向く相場・向かない相場': '', '評価の仕方': '', '数値欄': Object.fromEntries((q['数値欄のキー'] || []).map((k) => [k, null])) });
+  const blankStrategy = (q) => ({ name: '', '状態': '代替案', '改定日': todayISO(), '区分': '共通', '一言で': '', '当てはまる条件': [], 'しないこと': [], '出典': '', '数値欄': Object.fromEntries((q['数値欄のキー'] || []).map((k) => [k, null])) });
   function strategyCard(q, s, i) {
     const li = (a) => (Array.isArray(a) ? a : lines(a)).map((x) => `<li>${E(x)}</li>`).join('');
     const nums = Object.entries(s['数値欄'] || {}).filter(([k, v]) => v != null && v !== '').map(([k, v]) => `<span><b>${E(keyLabel(k))}</b> ${E(v)}</span>`).join('');
     const sec = (title, body) => (body ? `<h4>${title}</h4>${body}` : '');
     return `<article class="strat ${s['状態'] === '不採用' ? 'off' : ''}" id="s-${E(s.name)}"><header><h3>${E(s.name)}</h3>${pill(s['状態'])}${s['区分'] !== '共通' ? `<span class="pill">${E(s['区分'])}</span>` : ''}</header>
 <p class="one">${E(s['一言で'])}</p>${sec('条件', `<ul>${li(s['当てはまる条件'])}</ul>`)}${nums ? `<div class="k">${nums}</div>` : ''}
-<details class="fold"><summary>詳細</summary>${sec('禁止', (s['しないこと'] || []).length ? `<ul>${li(s['しないこと'])}</ul>` : '')}${sec('いつやるか', s['兼業での実行手順'] ? `<p>${E(s['兼業での実行手順'])}</p>` : '')}${sec('出典', s['出典'] ? `<p>${linkify(s['出典'])}</p>` : '')}${sec('向く相場', s['向く相場・向かない相場'] ? `<p>${E(s['向く相場・向かない相場'])}</p>` : '')}${sec('不採用にする基準', s['評価の仕方'] ? `<p>${E(s['評価の仕方'])}</p>` : '')}<p class="rev">改定 ${E(s['改定日'])}</p></details>
+<details class="fold"><summary>詳細</summary>${sec('禁止', (s['しないこと'] || []).length ? `<ul>${li(s['しないこと'])}</ul>` : '')}${sec('出典', s['出典'] ? `<p>${linkify(s['出典'])}</p>` : '')}<p class="rev">改定 ${E(s['改定日'])}</p></details>
 <div class="btns"><button class="b quiet" data-act="edit-strategy" data-q="${q.num}" data-i="${i}">編集</button></div></article>`;
   }
   function strategyForm(q, s0, i) {
     // 条件の行を足し引きして描き直した時に、入力途中の文字を失わないよう、下書き（edit.draft）を優先する
-    const d = (edit && edit.draft) || {}, s = Object.assign({}, s0, Object.fromEntries(['name', '状態', '区分', '一言で', '兼業での実行手順', '出典', '向く相場・向かない相場', '評価の仕方'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]]))); if (d['しないこと'] !== undefined) s['しないこと'] = lines(d['しないこと']); if (d['当てはまる条件'] !== undefined) s['当てはまる条件'] = lines(d['当てはまる条件']);
+    const d = (edit && edit.draft) || {}, s = Object.assign({}, s0, Object.fromEntries(['name', '状態', '区分', '一言で', '出典'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]]))); if (d['しないこと'] !== undefined) s['しないこと'] = lines(d['しないこと']); if (d['当てはまる条件'] !== undefined) s['当てはまる条件'] = lines(d['当てはまる条件']);
     const numf = (q['数値欄のキー'] || []).map((k) => fld(keyLabel(k), 'n:' + k, d['n:' + k] !== undefined ? d['n:' + k] : (s['数値欄'] ? s['数値欄'][k] : ''))).join('');
     return `<form id="f-strategy" class="strat form" data-q="${q.num}" data-i="${i}"><div class="form cols">${fld('戦略名', 'name', s.name)}${fld('状態', '状態', s['状態'], { type: 'select', options: ['採用', '代替案', '不採用'] })}${fld('区分', '区分', s['区分'], { type: 'select', options: ['共通', 'IPO', '通常'] })}</div>
 ${fld('一言で', '一言で', s['一言で'])}${q.num === 1 ? condBuilder(edit && edit.cond ? edit.cond : (s['スクリーナー条件'] || [])) : fld('条件（1行1つ）', '当てはまる条件', text(s['当てはまる条件']), { type: 'textarea' })}${fld('禁止（1行1つ）', 'しないこと', text(s['しないこと']), { type: 'textarea', rows: 3 })}
-${fld('いつやるか', '兼業での実行手順', s['兼業での実行手順'], { type: 'textarea', rows: 2 })}${fld('出典', '出典', s['出典'], { type: 'textarea', rows: 2 })}${fld('向く相場', '向く相場・向かない相場', s['向く相場・向かない相場'], { type: 'textarea', rows: 2 })}${fld('不採用にする基準', '評価の仕方', s['評価の仕方'], { type: 'textarea', rows: 2 })}
+${fld('出典', '出典', s['出典'], { type: 'textarea', rows: 2 })}
 ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
 <div class="btns"><button class="b primary" data-act="save-strategy">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button>${i >= 0 ? '<button class="b quiet danger" data-act="del-strategy" type="button">削除</button>' : ''}</div></form>`;
   }
@@ -526,7 +526,7 @@ ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改�
       if (!v.name.trim()) { msg = { ng: true, text: '戦略名を入れる' }; showToast(); return; }
       const old = idx >= 0 ? q['戦略'][idx] : null;
       const s = { name: v.name.trim(), '状態': v['状態'], '改定日': todayISO(), '区分': v['区分'], '一言で': v['一言で'], '当てはまる条件': lines(v['当てはまる条件']), 'しないこと': lines(v['しないこと']),
-        '兼業での実行手順': v['兼業での実行手順'], '出典': v['出典'], '向く相場・向かない相場': v['向く相場・向かない相場'], '評価の仕方': v['評価の仕方'], '数値欄': {} };
+        '出典': v['出典'], '数値欄': {} };
       (q['数値欄のキー'] || []).forEach((k) => { s['数値欄'][k] = numOrNull(v['n:' + k]); });
       if (q.num === 1) {
         s['スクリーナー条件'] = readCond(f);
