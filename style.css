@@ -143,3 +143,4 @@ details[open]>summary .sum{display:none} .grp>summary .sum{display:block;font-si
 .bar .sh{margin:0} .verdict{margin-bottom:10px} section>.verdict{margin-top:14px}
 .foot#last-update{margin-top:-6px;padding-top:0}
 .grp>summary small{font-weight:400;font-size:12px;color:var(--muted);margin-left:8px}
+.scr{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px} .scr h4{margin:0 0 4px} .scr h4 small{font-weight:400;margin-left:8px} .scr p{margin:0 0 8px;font-size:15px} .scr .facts{grid-template-columns:1fr 1fr}

@@ -347,10 +347,11 @@ ${grp('AIの根拠とメモ', holding || s === '決済済み', `<label class="f 
     return shell(`<h1>${!isNew ? E(c['銘柄名'] || '候補銘柄') + ' ' + pill(candState(c)) : '候補銘柄を追加'}</h1>
 <form id="f-cand" data-i="${i}">
 ${grp('銘柄', isNew, fld('候補に入った日', '日付', c['日付'], { type: 'date' }) + fld('コード', 'コード', c['コード']) + fld('銘柄名', '銘柄名', c['銘柄名']) + fld('区分', '区分', c['区分'], { type: 'select', options: ['通常', 'IPO'] }) + fld('上場日（IPO）', '上場日', c['上場日'], { type: 'date' }), isNew ? '' : `${c['コード']} ${c['銘柄名']}　${c['区分']}${c['上場日'] ? `　上場 ${dShort(c['上場日'])}` : ''}`)}
-${grp('スクリーニング', isNew, fld('売買代金（億円）', '売買代金_億', c['売買代金_億'], { type: 'number', step: '0.1' }) + fld('時価総額（億円）', '時価総額_億', c['時価総額_億'], { type: 'number' }) + fld('終値', '終値', c['終値'], { type: 'number' }) + fld('絞り込み', '絞り込み', c['絞り込み'], { ph: '空欄なら自動' }), isNew ? '' : `${dShort(c['日付'])}　${c['絞り込み'] || '—'}　売買代金 ${c['売買代金_億'] != null ? c['売買代金_億'] + '億' : '—'}・時価総額 ${c['時価総額_億'] != null ? c['時価総額_億'] + '億' : '—'}・終値 ${yen(c['終値']) || '—'}`)}
+${isNew ? grp('スクリーニング', true, fld('売買代金（億円・10日平均）', '売買代金_億', c['売買代金_億'], { type: 'number', step: '0.1' }) + fld('時価総額（億円）', '時価総額_億', c['時価総額_億'], { type: 'number' }) + fld('終値', '終値', c['終値'], { type: 'number' }) + fld('絞り込み', '絞り込み', c['絞り込み'], { ph: '空欄なら 1 スクリーニングの条件で自動' }))
+  : `<section class="scr"><h4>スクリーニングの結果<small>${E(dShort(c['日付']))}</small></h4><p>${c['絞り込み'] === '可' ? `<a href="#rule/1/${encodeURIComponent(c['戦略'] || '')}">${E(c['戦略'] || '1 スクリーニング')}</a> を通過` : `<span class="pill pill-ng">外れた</span> ${E(c['絞り込み'] || '')}`}</p><dl class="facts"><div><dt>売買代金（10日平均）</dt><dd>${c['売買代金_億'] != null ? E(c['売買代金_億']) + '億円' : '—'}</dd></div><div><dt>時価総額</dt><dd>${c['時価総額_億'] != null ? E(c['時価総額_億']) + '億円' : '—'}</dd></div><div><dt>終値（通った時）</dt><dd>${yen(c['終値']) ? yen(c['終値']) + '円' : '—'}</dd></div><div><dt>その他</dt><dd>${E(c['メモ'] || '—')}</dd></div></dl>${['売買代金_億', '時価総額_億', '終値', '絞り込み'].map((k) => `<input type="hidden" name="${k}" value="${E(c[k] == null ? '' : c[k])}">`).join('')}</section>`}
 ${grp('4条件<small>AIの仮判定。直してよい</small>', true, cond + `<label class="chk span"><input type="checkbox" name="確認" ${c['確認'] ? 'checked' : ''}> 根拠を読んで確認した${c['確認'] ? `　${E(dShort(c['確認']))}` : ''}</label>`)}
 <input type="hidden" name="型が出た日" value="${E(c['型が出た日'] || '')}">${typed}
-<label class="f"><span>メモ</span><textarea name="メモ" rows="2">${E(c['メモ'])}</textarea></label>
+${isNew ? `<label class="f"><span>メモ</span><textarea name="メモ" rows="2">${E(c['メモ'])}</textarea></label>` : `<input type="hidden" name="メモ" value="${E(c['メモ'])}">`}
 <div class="btns"><button class="b primary" data-act="save-cand">保存</button><a class="b quiet" href="#trades">戻る</a>${i >= 0 ? '<button class="b quiet danger" data-act="del-cand" type="button">削除</button>' : ''}</div></form>`);
   }
   function screen(c) {
@@ -676,7 +677,7 @@ ${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
     if (act === 'save-cand') {
       const f = document.getElementById('f-cand'), v = fd(f), idx = Number(f.dataset.i);
       const c = { '日付': v['日付'], 'コード': v['コード'], '銘柄名': v['銘柄名'], '区分': v['区分'], '上場日': v['上場日'] || null, '売買代金_億': numOrNull(v['売買代金_億']), '時価総額_億': numOrNull(v['時価総額_億']),
-        '終値': numOrNull(v['終値']), '絞り込み': v['絞り込み'], '判定': [0, 1, 2, 3].map((k) => v['j' + k] || null), '根拠': [0, 1, 2, 3].map((k) => (v['g' + k] || '').trim()), '確認': v['確認'] ? ((idx >= 0 && data['候補'][idx]['確認']) || todayISO()) : null, '型が出た日': v['型が出た日'] || null, 'メモ': v['メモ'] };
+        '終値': numOrNull(v['終値']), '戦略': (idx >= 0 && data['候補'][idx]['戦略']) || null, '絞り込み': v['絞り込み'], '判定': [0, 1, 2, 3].map((k) => v['j' + k] || null), '根拠': [0, 1, 2, 3].map((k) => (v['g' + k] || '').trim()), '確認': v['確認'] ? ((idx >= 0 && data['候補'][idx]['確認']) || todayISO()) : null, '型が出た日': v['型が出た日'] || null, 'メモ': v['メモ'] };
       if (!c['絞り込み']) c['絞り込み'] = screen(c);
       if (idx >= 0) data['候補'][idx] = c; else data['候補'].push(c);
       if (await save('候補', `候補 ${c['銘柄名']}：${candState(c)}`)) { if (idx >= 0 && history.length > 1) history.back(); else location.hash = '#trades'; } else render(); return;
