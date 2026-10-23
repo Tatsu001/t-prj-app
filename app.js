@@ -6,7 +6,7 @@
   const todayISO = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
   const WD = '日月火水木金土';
   const dShort = (s) => (s ? String(s).slice(5).replace('-', '/') : '');
-  const FILES = ['前提', '問い', '原則', '取引', '候補', '改定履歴', '地合い'];
+  const FILES = ['前提', '問い', '原則', '取引', '候補', '改定履歴', '地合い', 'スクリーナー項目'];
   const OPTIONAL = { '地合い': [] };
   const KEY = 'si.cfg';
   const app = document.getElementById('app');
@@ -113,7 +113,19 @@
   const stock = (t) => `<b>${E(t['銘柄名'])}</b><span class="code">${E(t['コード'])}</span>`;
   const docLink = (p, label) => `<a href="#docs/${p.split('/').map(encodeURIComponent).join('/')}">${E(label || docTitle(p))}</a>`;
   const linkify = (s) => E(s).replace(/docs\/(basics\/)?(\d\d)/g, (m, b, n) => { const hit = DOC_LIST.find(([p]) => p.startsWith(`docs/${b || ''}${n}_`)); return hit ? `<a href="#docs/${hit[0]}">${m}</a>` : m; });
-  const keyLabel = (k) => k.replace(/_pct$/, '（%）').replace(/_億$/, '（億円）').replace(/_営業日$/, '（営業日）').replace(/_日$/, '（日）').replace(/_R$/, '（R）').replace(/_月$/, '（月）');
+  const keyLabel = (k) => k.replace(/_件$/, '（件）').replace(/_pct$/, '（%）').replace(/_億$/, '（億円）').replace(/_営業日$/, '（営業日）').replace(/_日$/, '（日）').replace(/_R$/, '（R）').replace(/_月$/, '（月）');
+  // 1 スクリーニングのスクリーナー条件（項目・以上／以下・数字）。項目の一覧は data/スクリーナー項目.json
+  const CAT = () => data['スクリーナー項目'] || [];
+  const catItem = (k) => CAT().find((x) => x.key === k);
+  const fmtNum = (v) => (Number.isInteger(Number(v)) ? String(Number(v)) : String(v));
+  const condText = (c) => `${c['項目']}が${fmtNum(c['値'])}${(catItem(c['項目']) || {})['単位'] || ''}${c['比較']}`;
+  const genCondLines = (st) => (st['スクリーナー条件'] || []).map(condText).concat([`通った銘柄は平均売買代金の大きい順に${(st['数値欄'] || {})['候補上限_件'] || 10}件まで候補に入れる。買ってよいかは問い2、今買うかは問い3で決める`]);
+  const readCond = (f) => { const v = fd(f), out = []; for (let r = 0; v['ck' + r] !== undefined; r++) { if (v['ck' + r] && v['cv' + r] !== '') out.push({ '項目': v['ck' + r], '比較': v['co' + r], '値': Number(v['cv' + r]) }); } return out; };
+  function condBuilder(conds) {
+    const rows = conds.length ? conds : [{ '項目': '', '比較': '以上', '値': '' }];
+    const opts = (sel) => `<option value="">—</option>` + CAT().map((x) => `<option value="${E(x.key)}" ${x.key === sel ? 'selected' : ''}>${E(x.key)}${x['単位'] ? `（${E(x['単位'])}）` : ''}</option>`).join('');
+    return `<h4>スクリーナーの条件</h4><p class="note">項目を選び、以上か以下と数字を入れる。項目の一覧に無い条件は書けない</p>${rows.map((c, r) => `<div class="form cols cond"><label class="f"><span>項目</span><select name="ck${r}">${opts(c['項目'])}</select></label><label class="f"><span>以上／以下</span><select name="co${r}"><option ${c['比較'] === '以上' ? 'selected' : ''}>以上</option><option ${c['比較'] === '以下' ? 'selected' : ''}>以下</option></select></label><label class="f"><span>数字${c['項目'] && catItem(c['項目']) && catItem(c['項目'])['単位'] ? `（${E(catItem(c['項目'])['単位'])}）` : ''}</span><input name="cv${r}" type="number" step="any" inputmode="decimal" value="${E(c['値'])}"></label><div class="btns"><button type="button" class="b quiet danger" data-act="del-cond" data-r="${r}">この条件を消す</button></div></div>`).join('')}<div class="btns"><button type="button" class="b" data-act="add-cond">条件を足す</button></div>`;
+  }
   function candState(c) {
     if (c['絞り込み'] && c['絞り込み'] !== '可') return '見送り';
     const j = c['判定'] || [];
@@ -316,15 +328,13 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
 <div class="btns"><button class="b primary" data-act="save-cand">保存</button><a class="b quiet" href="#trades">戻る</a>${i >= 0 ? '<button class="b quiet danger" data-act="del-cand" type="button">削除</button>' : ''}</div></form>`);
   }
   function screen(c) {
-    const n = Calc.nums(data['問い'], 1, c['区分']);
-    if (c['売買代金_億'] != null && n['売買代金下限_億'] != null && c['売買代金_億'] < n['売買代金下限_億']) return '不可：売買代金';
-    if (c['時価総額_億'] != null && n['時価総額下限_億'] != null && c['時価総額_億'] < n['時価総額下限_億']) return '不可：時価総額';
-    if (c['区分'] === 'IPO' && c['上場日'] && c['日付']) {
-      const cal = Calc.makeCal(data['前提']['休日']);
-      const bd = cal.bdays(new Date(c['上場日'] + 'T00:00:00Z'), new Date(c['日付'] + 'T00:00:00Z')) + 1;
-      if (n['上場後下限_営業日'] != null && bd < n['上場後下限_営業日']) return '不可：上場直後';
-      const days = (new Date(c['日付']) - new Date(c['上場日'])) / 86400000;
-      if (n['上場後上限_日'] != null && days > n['上場後上限_日']) return '不可：IPO期間外';
+    const st = Calc.adopted(data['問い'], 1, c['区分']) || {};
+    const days = c['上場日'] && c['日付'] ? Math.floor((new Date(c['日付']) - new Date(c['上場日'])) / 86400000) : 99999;
+    const vals = { '時価総額': c['時価総額_億'], '平均売買代金（10日）': c['売買代金_億'], '平均売買代金（30日）': c['売買代金_億'], '当日売買代金': c['売買代金_億'], '上場からの日数': days, '株価': c['終値'] };
+    for (const k of st['スクリーナー条件'] || []) {
+      const v = vals[k['項目']];
+      if (v == null || v === '') continue;
+      if (!(k['比較'] === '以上' ? v >= k['値'] : v <= k['値'])) return '不可：' + k['項目'];
     }
     return '可';
   }
@@ -340,7 +350,7 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
     const preForm = edit && edit.type === 'premise' ? `<form id="f-premise" class="form cols">${fld('初期資金（円）', '初期資金', pre['初期資金'], { type: 'number' })}${fld('月初資金（円）', '月初資金', pre['月初資金'], { type: 'number' })}${fld('停止残高（円）', '停止残高', pre['停止残高'], { type: 'number' })}${fld('単元（株）', '単元', pre['単元'], { type: 'number' })}${fld('証券会社', '証券会社', pre['証券会社'])}<label class="f span"><span>東証の休業日（1行1日）</span><textarea name="休日" rows="6">${E(pre['休日'].join('\n'))}</textarea></label><div class="btns span"><button class="b primary" data-act="save-premise">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button></div></form>`
       : `<dl class="facts"><div><dt>初期資金</dt><dd>${yen(pre['初期資金'])}円</dd></div><div><dt>月初資金（1Rの基準）</dt><dd>${yen(pre['月初資金'])}円</dd></div><div><dt>停止残高</dt><dd>${yen(pre['停止残高'])}円</dd></div><div><dt>単元</dt><dd>${pre['単元']}株</dd></div><div><dt>証券会社</dt><dd>${E(pre['証券会社'])}</dd></div><div><dt>休業日</dt><dd>${pre['休日'].length}日</dd></div></dl><div class="btns"><button class="b quiet" data-act="edit-premise">編集</button></div>`;
     const hist = data['改定履歴'].slice().reverse();
-    const hForm = edit && edit.type === 'hist' ? `<form id="f-hist" class="form cols">${fld('日付', '日付', todayISO(), { type: 'date' })}${fld('項目（番号）', '問い', '')}${fld('戦略', '戦略', '')}${fld('変更', '変更', '数値変更', { type: 'select', options: ['追加', '採用', '代替案', '不採用', '数値変更', '文言変更', '削除'] })}${fld('変更前', '変更前', '')}${fld('変更後', '変更後', '')}${fld('根拠の件数', '件数', 0, { type: 'number' })}<label class="f span"><span>理由</span><input name="理由"></label><div class="btns span"><button class="b primary" data-act="save-hist">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button></div></form>` : '';
+    const hForm = edit && edit.type === 'hist' ? `<form id="f-hist" class="form cols">${fld('日付', '日付', todayISO(), { type: 'date' })}${fld('項目（番号）', '問い', '')}${fld('戦略', '戦略', '')}${fld('変更', '変更', '数値変更', { type: 'select', options: ['追加', '採用', '代替案', '不採用', '数値変更', '条件変更', '文言変更', '削除'] })}${fld('変更前', '変更前', '')}${fld('変更後', '変更後', '')}${fld('根拠の件数', '件数', 0, { type: 'number' })}<label class="f span"><span>理由</span><input name="理由"></label><div class="btns span"><button class="b primary" data-act="save-hist">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button></div></form>` : '';
     return shell(`<h1>ルール</h1><p class="lead">採用は項目ごとに1つ（IPOと通常で分ける項目は各1つ）、代替案は2つまで。変えるのは${q12['周期_月'] === 1 ? '月1回' : q12['周期_月'] + 'か月に1回'}の見直しで</p>
 <section><h2>今のルール</h2><div class="rows">${list}</div></section>
 <section><div class="bar"><h2>原則</h2>${pEdit ? '<button class="b quiet" data-act="cancel">閉じる</button>' : '<button class="b quiet" data-act="edit-principles">編集</button>'}</div>${principles}</section>
@@ -380,12 +390,14 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
 <details class="fold"><summary>詳細</summary>${sec('禁止', (s['しないこと'] || []).length ? `<ul>${li(s['しないこと'])}</ul>` : '')}${sec('いつやるか', s['兼業での実行手順'] ? `<p>${E(s['兼業での実行手順'])}</p>` : '')}${sec('出典', s['出典'] ? `<p>${linkify(s['出典'])}</p>` : '')}${sec('向く相場', s['向く相場・向かない相場'] ? `<p>${E(s['向く相場・向かない相場'])}</p>` : '')}${sec('不採用にする基準', s['評価の仕方'] ? `<p>${E(s['評価の仕方'])}</p>` : '')}<p class="rev">改定 ${E(s['改定日'])}</p></details>
 <div class="btns"><button class="b quiet" data-act="edit-strategy" data-q="${q.num}" data-i="${i}">編集</button></div></article>`;
   }
-  function strategyForm(q, s, i) {
-    const numf = (q['数値欄のキー'] || []).map((k) => fld(keyLabel(k), 'n:' + k, s['数値欄'] ? s['数値欄'][k] : '')).join('');
+  function strategyForm(q, s0, i) {
+    // 条件の行を足し引きして描き直した時に、入力途中の文字を失わないよう、下書き（edit.draft）を優先する
+    const d = (edit && edit.draft) || {}, s = Object.assign({}, s0, Object.fromEntries(['name', '状態', '区分', '一言で', '兼業での実行手順', '出典', '向く相場・向かない相場', '評価の仕方'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]]))); if (d['しないこと'] !== undefined) s['しないこと'] = lines(d['しないこと']); if (d['当てはまる条件'] !== undefined) s['当てはまる条件'] = lines(d['当てはまる条件']);
+    const numf = (q['数値欄のキー'] || []).map((k) => fld(keyLabel(k), 'n:' + k, d['n:' + k] !== undefined ? d['n:' + k] : (s['数値欄'] ? s['数値欄'][k] : ''))).join('');
     return `<form id="f-strategy" class="strat form" data-q="${q.num}" data-i="${i}"><div class="form cols">${fld('戦略名', 'name', s.name)}${fld('状態', '状態', s['状態'], { type: 'select', options: ['採用', '代替案', '不採用'] })}${fld('区分', '区分', s['区分'], { type: 'select', options: ['共通', 'IPO', '通常'] })}</div>
-${fld('一言で', '一言で', s['一言で'])}${fld('条件（1行1つ）', '当てはまる条件', text(s['当てはまる条件']), { type: 'textarea' })}${fld('禁止（1行1つ）', 'しないこと', text(s['しないこと']), { type: 'textarea', rows: 3 })}
+${fld('一言で', '一言で', s['一言で'])}${q.num === 1 ? condBuilder(edit && edit.cond ? edit.cond : (s['スクリーナー条件'] || [])) : fld('条件（1行1つ）', '当てはまる条件', text(s['当てはまる条件']), { type: 'textarea' })}${fld('禁止（1行1つ）', 'しないこと', text(s['しないこと']), { type: 'textarea', rows: 3 })}
 ${fld('いつやるか', '兼業での実行手順', s['兼業での実行手順'], { type: 'textarea', rows: 2 })}${fld('出典', '出典', s['出典'], { type: 'textarea', rows: 2 })}${fld('向く相場', '向く相場・向かない相場', s['向く相場・向かない相場'], { type: 'textarea', rows: 2 })}${fld('不採用にする基準', '評価の仕方', s['評価の仕方'], { type: 'textarea', rows: 2 })}
-${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改定の理由（改定履歴に残る）', 'reason', '')}
+${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
 <div class="btns"><button class="b primary" data-act="save-strategy">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button>${i >= 0 ? '<button class="b quiet danger" data-act="del-strategy" type="button">削除</button>' : ''}</div></form>`;
   }
 
@@ -481,6 +493,12 @@ ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改�
     if (act === 'edit-principle') { edit = { type: 'principle', idx: i }; render(); return; }
     if (act === 'edit-premise') { edit = { type: 'premise' }; render(); return; }
     if (act === 'edit-strategy') { edit = { type: 'strategy', q: Number(b.dataset.q), idx: i }; render(); return; }
+    if (act === 'add-cond' || act === 'del-cond') {
+      const f = document.getElementById('f-strategy'), v = fd(f), rows = [];
+      for (let r = 0; v['ck' + r] !== undefined; r++) rows.push({ '項目': v['ck' + r], '比較': v['co' + r], '値': v['cv' + r] });
+      if (act === 'add-cond') rows.push({ '項目': '', '比較': '以上', '値': '' }); else rows.splice(Number(b.dataset.r), 1);
+      edit.cond = rows; edit.draft = v; render(); return;
+    }
     if (act === 'edit-hist') { edit = { type: 'hist' }; render(); return; }
     if (act === 'clear-cfg') { cfg.token = ''; localStorage.setItem(KEY, JSON.stringify(cfg)); loaded = false; location.hash = '#settings'; render(); return; }
     e.preventDefault();
@@ -506,11 +524,18 @@ ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改�
       const s = { name: v.name.trim(), '状態': v['状態'], '改定日': todayISO(), '区分': v['区分'], '一言で': v['一言で'], '当てはまる条件': lines(v['当てはまる条件']), 'しないこと': lines(v['しないこと']),
         '兼業での実行手順': v['兼業での実行手順'], '出典': v['出典'], '向く相場・向かない相場': v['向く相場・向かない相場'], '評価の仕方': v['評価の仕方'], '数値欄': {} };
       (q['数値欄のキー'] || []).forEach((k) => { s['数値欄'][k] = numOrNull(v['n:' + k]); });
+      if (q.num === 1) {
+        s['スクリーナー条件'] = readCond(f);
+        if (s['スクリーナー条件'].some((c) => !catItem(c['項目']))) { msg = { ng: true, text: '項目の一覧に無い条件がある' }; showToast(); return; }
+        if (!s['スクリーナー条件'].length) { msg = { ng: true, text: '条件を1つは入れる' }; showToast(); return; }
+        s['当てはまる条件'] = genCondLines(s);
+      }
       if (old && old.name !== s.name) { data['取引'].forEach((t) => { Object.keys(TKEY).forEach((k) => { if (t[k] === old.name) t[k] = s.name; }); }); }
       if (idx >= 0) q['戦略'][idx] = s; else q['戦略'].push(s);
-      const change = !old ? '追加' : old['状態'] !== s['状態'] ? s['状態'] : JSON.stringify(old['数値欄']) !== JSON.stringify(s['数値欄']) ? '数値変更' : '文言変更';
-      const before = !old ? '' : change === '数値変更' ? JSON.stringify(old['数値欄']) : old['状態'];
-      const after_ = change === '数値変更' ? JSON.stringify(s['数値欄']) : s['状態'];
+      const condChanged = q.num === 1 && old && JSON.stringify(old['スクリーナー条件'] || []) !== JSON.stringify(s['スクリーナー条件']);
+      const change = !old ? '追加' : old['状態'] !== s['状態'] ? s['状態'] : condChanged ? '条件変更' : JSON.stringify(old['数値欄']) !== JSON.stringify(s['数値欄']) ? '数値変更' : '文言変更';
+      const before = !old ? '' : change === '数値変更' ? JSON.stringify(old['数値欄']) : change === '条件変更' ? (old['スクリーナー条件'] || []).map(condText).join('、') : old['状態'];
+      const after_ = change === '数値変更' ? JSON.stringify(s['数値欄']) : change === '条件変更' ? s['スクリーナー条件'].map(condText).join('、') : s['状態'];
       data['改定履歴'].push({ '日付': todayISO(), '問い': String(q.num), '戦略': s.name, '変更': change, '変更前': before, '変更後': after_, '理由': v.reason || '', '件数': data['取引'].filter((t) => cstate(t) === '決済済み' && Object.keys(TKEY).some((k) => t[k] === s.name)).length });
       const ok = await save('問い', `${q.num} ${q.name} ${s.name}：${change}`);
       if (ok) { await save('改定履歴', `改定履歴：${q.num} ${s.name}`); if (old && old.name !== s.name) await save('取引', '戦略名の変更を取引に反映'); edit = null; }
