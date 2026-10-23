@@ -129,7 +129,7 @@
     const opts = (sel) => `<option value="">—</option>` + CAT().map((x) => `<option value="${E(x.key)}" ${x.key === sel ? 'selected' : ''}>${E(x.key)}${x['単位'] ? `（${E(x['単位'])}）` : ''}</option>`).join('');
     const pickBox = (c, r) => { const w = Array.isArray(c['値']) ? c['値'] : (c['値'] ? [c['値']] : []); return `<div class="f"><span>当てはまるもの（複数可）</span><div class="picks">${(catItem(c['項目'])['選択肢'] || []).map((o) => `<label class="chk"><input type="checkbox" name="cv${r}" value="${E(o)}" ${w.includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div></div>`; };
     const unit = (c) => ((catItem(c['項目']) || {})['単位'] || '');
-    return `<h4>スクリーナーの条件<small>全部そろった銘柄が候補になる</small></h4>${rows.map((c, r) => `<div class="cond"><div class="f"><span>項目</span><div class="hx"><select name="ck${r}">${opts(c['項目'])}</select><button type="button" class="b quiet x" data-act="del-cond" data-r="${r}" aria-label="この条件を消す">×</button></div></div>${isPick(c['項目']) ? pickBox(c, r) : `<div class="form cols"><label class="f"><span>以上／以下</span><select name="co${r}"><option ${c['比較'] === '以上' ? 'selected' : ''}>以上</option><option ${c['比較'] === '以下' ? 'selected' : ''}>以下</option></select></label><label class="f"><span>値${unit(c) ? `（${E(unit(c))}）` : ''}</span><input name="cv${r}" type="number" step="any" inputmode="decimal" value="${E(Array.isArray(c['値']) ? '' : c['値'])}"></label></div>`}</div>`).join('')}<div class="btns"><button type="button" class="b" data-act="add-cond">条件を足す</button></div>`;
+    return `<h4>スクリーナーの条件<small>全部満たした銘柄が候補になる</small></h4>${rows.map((c, r) => `<div class="cond"><div class="f"><span>項目</span><div class="hx"><select name="ck${r}">${opts(c['項目'])}</select><button type="button" class="b quiet x" data-act="del-cond" data-r="${r}" aria-label="この条件を消す">×</button></div></div>${isPick(c['項目']) ? pickBox(c, r) : `<div class="form cols"><label class="f"><span>以上／以下</span><select name="co${r}"><option ${c['比較'] === '以上' ? 'selected' : ''}>以上</option><option ${c['比較'] === '以下' ? 'selected' : ''}>以下</option></select></label><label class="f"><span>値${unit(c) ? `（${E(unit(c))}）` : ''}</span><input name="cv${r}" type="number" step="any" inputmode="decimal" value="${E(Array.isArray(c['値']) ? '' : c['値'])}"></label></div>`}</div>`).join('')}<div class="btns"><button type="button" class="b" data-act="add-cond">条件を足す</button></div>`;
   }
   function candState(c) {
     if (c['絞り込み'] && c['絞り込み'] !== '可') return '見送り';
@@ -372,6 +372,7 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
   }
   const principleForm = (p, i) => `<form id="f-principle" class="form" data-i="${i}">${fld('番号', 'id', p.id, { type: 'number' })}${fld('見出し', 'title', p.title)}${fld('本文', 'text', p.text, { type: 'textarea', rows: 2 })}${fld('出典', '出典', p['出典'])}<div class="btns"><button class="b primary" data-act="save-principle">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button><button class="b quiet danger" data-act="del-principle" type="button">削除</button></div></form>`;
 
+  const COND_SUB = { 1: '全部満たした銘柄が候補になる', 2: '全部○なら買ってよい', 3: '全部そろった日に買う', 4: 'この形で注文する', 5: 'この式で株数を決める', 6: 'この手順で売る', 7: 'どれか1つに当たれば手仕舞う', 8: 'この決まりで扱う', 9: '全部守れている時だけ新規買い', 10: 'どれか1つに当たれば新規買いを止める', 11: '当たった段階まで縮める', 12: 'この手順で見直す', 13: 'いつ何をするか' };
   const STATE_DESC = { '採用': 'いま使っている', '代替案': '月次の見直しで採用と比べる控え。2つまで', '不採用': '記録として残す' };
   // 数値欄の各キーを、どの計算・作業が読むか（フォームの札）
   const USE = { '候補上限_件': 'スクリーナー', '損切り幅下限_pct': '型の判定', '損切り幅上限_pct': '型の判定', '乖離_pct': '発注価格', '取消_営業日': '注文の期限', '追わない上限_pct': 'AIの判定', '1R_pct': '株数', '1R上限_pct': '株数', '1銘柄上限_pct': '株数', '利確水準_R': '利確の注文', '利確割合_pct': '利確の注文', 'トレーリング': '利確の注文', '最大保有_営業日': '期限', '解除前_営業日': '期限', '決算前_営業日': '期限', '再エントリー_営業日': 'AIの判定', '同時保有上限': '新規買いの関門', '現金下限_pct': '新規買いの関門', '合計リスク上限_pct': '新規買いの関門', '同セクター上限': '新規買いの関門', '移動平均_日': '地合い', '先物夜間_pct': '地合い', '損切り直後ロット_pct': 'ロットと停止', '連敗停止': 'ロットと停止', '停止_営業日': 'ロットと停止', '段階1_pct': 'ロットと停止', '段階1ロット_pct': 'ロットと停止', '段階2_pct': 'ロットと停止', '段階3_pct': 'ロットと停止', '周期_月': '月次の見直し', '最小件数': '月次の見直し', '不採用判断': '月次の見直し', '改定後慎重': '月次の見直し' };
@@ -414,8 +415,8 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
     if (st === '不採用') acts.push(a('restore', '代替案に戻す'));
     return `<article class="strat ${st === '不採用' ? 'off' : ''}" id="s-${E(s.name)}"><header><h3>${E(s.name)}</h3>${s['区分'] !== '共通' ? `<span class="pill">${E(s['区分'])}</span>` : ''}</header>
 <p class="one">${E(fill(s['一言で'], s))}</p>
-<h4>当てはまる条件<small>全部そろって動く</small></h4><ul>${li(s['当てはまる条件'])}</ul>${nums ? `<div class="k">${nums}</div>` : ''}
-<h4>しないこと<small>1つでも当たれば注文しない</small></h4>${(s['しないこと'] || []).length ? `<ul class="ng">${li(s['しないこと'])}</ul>` : '<p class="empty">なし</p>'}
+<h4>当てはまる条件<small>${E(COND_SUB[q.num] || '')}</small></h4><ul>${li(s['当てはまる条件'])}</ul>${nums ? `<div class="k">${nums}</div>` : ''}
+<h4>しないこと</h4>${(s['しないこと'] || []).length ? `<ul class="ng">${li(s['しないこと'])}</ul>` : '<p class="empty">なし</p>'}
 <p class="rev">${s['出典'] ? `出典　${linkify(s['出典'])}　` : ''}改定 ${E(s['改定日'])}</p>
 <div class="btns">${acts.join('')}</div></article>`;
   }
@@ -427,12 +428,12 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
     const numf = (q['数値欄のキー'] || []).map((k) => `<label class="f"><span>${E(keyLabel(k))}${USE[k] ? `<span class="pill">${E(USE[k])}</span>` : ''}</span><input name="n:${E(k)}" value="${E(numv(k))}" inputmode="decimal">${q.num !== 1 ? `<button type="button" class="key" data-act="ins-key" data-k="${E(k)}">{${E(k)}}</button>` : ''}</label>`).join('');
     const kub = ['共通', 'IPO', '通常'].map((v) => `<label class="chk"><input type="radio" name="区分" value="${v}" ${s['区分'] === v ? 'checked' : ''}> ${v}</label>`).join('');
     const condField = q.num === 1 ? condBuilder(edit && edit.cond ? edit.cond : (s['スクリーナー条件'] || []))
-      : `<label class="f"><span>当てはまる条件<small>全部そろって動く</small></span><textarea name="当てはまる条件" rows="5" placeholder="1行に1つ">${E(text(s['当てはまる条件']))}</textarea></label><div class="preview" id="cond-preview">${previewHtml(s['当てはまる条件'] || [], nums)}</div>`;
+      : `<label class="f"><span>当てはまる条件<small>${E(COND_SUB[q.num] || '')}</small></span><textarea name="当てはまる条件" rows="5" placeholder="1行に1つ">${E(text(s['当てはまる条件']))}</textarea></label><div class="preview" id="cond-preview">${previewHtml(s['当てはまる条件'] || [], nums)}</div>`;
     return `<form id="f-strategy" class="strat form editing" data-q="${q.num}" data-i="${i}"><h3>${i >= 0 ? E(s0.name) + ' を編集' : '戦略を追加'}</h3>
 ${fld('戦略名', 'name', s.name)}<div class="f"><span>区分</span><div class="picks">${kub}</div></div>${fld('一言で', '一言で', s['一言で'])}
 ${condField}
 ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}
-<label class="f"><span>しないこと<small>1つでも当たれば注文しない</small></span><textarea name="しないこと" rows="4" placeholder="1行に1つ">${E(text(s['しないこと']))}</textarea></label>
+<label class="f"><span>しないこと</span><textarea name="しないこと" rows="4" placeholder="1行に1つ">${E(text(s['しないこと']))}</textarea></label>
 <label class="f"><span>出典</span><textarea name="出典" rows="2" placeholder="テスタ スイング2、docs/basics/04">${E(s['出典'])}</textarea></label>
 ${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
 <div class="btns"><button class="b primary" data-act="save-strategy">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button>${i >= 0 ? '<button class="b quiet danger" data-act="del-strategy" type="button">削除</button>' : ''}</div></form>`;
