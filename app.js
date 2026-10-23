@@ -120,7 +120,7 @@
   const fmtNum = (v) => (Number.isInteger(Number(v)) ? String(Number(v)) : String(v));
   const isPick = (k) => ((catItem(k) || {})['種類'] === '選択');
   const condText = (c) => { if (isPick(c['項目'])) { const w = Array.isArray(c['値']) ? c['値'] : [c['値']]; return `${c['項目']}が${w.join('・')}${w.length > 1 ? 'のいずれか' : ''}`; } return `${c['項目']}が${fmtNum(c['値'])}${(catItem(c['項目']) || {})['単位'] || ''}${c['比較']}`; };
-  const genCondLines = (st) => (st['スクリーナー条件'] || []).map(condText).concat([`通った銘柄は平均売買代金の大きい順に${(st['数値欄'] || {})['候補上限_件'] || 10}件まで候補に入れる。買ってよいかは問い2、今買うかは問い3で決める`]);
+  const genCondLines = (st) => (st['スクリーナー条件'] || []).map(condText).concat(['平均売買代金の大きい順に{候補上限_件}件まで候補に入れる']);
   // 条件の行を読む。選択式の項目はチェックの付いた値の配列、数字の項目は文字のまま（保存時に数にする）
   const readRows = (f) => { const out = []; for (let r = 0; f.querySelector(`[name="ck${r}"]`); r++) { const k = f.querySelector(`[name="ck${r}"]`).value, co = f.querySelector(`[name="co${r}"]`); out.push({ '項目': k, '比較': isPick(k) ? 'いずれか' : (co ? co.value : '以上'), '値': isPick(k) ? Array.from(f.querySelectorAll(`input[name="cv${r}"]:checked`)).map((x) => x.value) : (f.querySelector(`input[name="cv${r}"]`) || {}).value || '' }); } return out; };
   const readCond = (f) => readRows(f).filter((c) => c['項目'] && (Array.isArray(c['値']) ? c['値'].length : c['値'] !== '')).map((c) => (Array.isArray(c['値']) ? c : Object.assign({}, c, { '値': Number(c['値']) })));
@@ -241,7 +241,7 @@ ${full ? `<ul class="checks">${h.checks.map((c) => `<li>${E(c)}</li>`).join('')}
   }
   function sceneWeek(st, od, today) {
     const q1 = Q(1);
-    const cond = q1['戦略'].filter((s) => s['状態'] === '採用').map((s) => { const parts = (s['当てはまる条件'] || []).map((x) => x.replace(/（[^（）]*[<>=][^（）]*）/g, '').trim()).filter((x) => !/^通った銘柄/.test(x));
+    const cond = q1['戦略'].filter((s) => s['状態'] === '採用').map((s) => { const parts = (s['当てはまる条件'] || []).map((x) => x.replace(/（[^（）]*[<>=][^（）]*）/g, '').trim()).filter((x) => !/候補に入れる/.test(x));
       return `<div class="row"><div class="r1"><b>${E(s['区分'])}</b><span class="code">${E(s.name)}</span></div><div class="r2">${E(parts.join('、'))}</div></div>`; }).join('');
     const watch = data['候補'].filter((c) => candState(c) === 'ウォッチ中'), wait = data['候補'].filter(waiting);
     const week = new Date(new Date(today).getTime() - 6 * 86400000).toISOString().slice(0, 10);
