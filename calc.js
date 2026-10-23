@@ -39,8 +39,8 @@
   const soldQty = (t) => (t['売り'] || []).reduce((a, s) => a + (s['株数'] || 0), 0);
   const remQty = (t) => (t['約定株数'] || 0) - soldQty(t);
   function state(t) {
+    if (t['状態'] === '取消') return '取消';  // 未約定の取消も効かせる
     if (!t['約定日']) return t['記録日'] ? '注文中' : '';
-    if (t['状態'] === '取消') return '取消';
     if (remQty(t) <= 0) return '決済済み';
     return soldQty(t) > 0 ? '一部利確' : '保有中';
   }
@@ -147,7 +147,7 @@
         const o = (byName(qs, 4, t['注文']) || adopted(qs, 4) || {})['数値欄'] || {};
         const age = cal.bdays(d(t['記録日']), T);
         out.new.push({ t, buy: { kind: '逆指値買い', price: t['発注価格'], qty: t['株数'] }, stop: { kind: '逆指値売り（損切り）', price: t['損切り価格'], qty: t['株数'] },
-          note: t['型'] + '。' + (o['取消_営業日'] ? o['取消_営業日'] + '営業日で約定しなければ取消' : ''), expired: o['取消_営業日'] ? age >= o['取消_営業日'] : false });
+          note: t['型'] + '。' + (o['取消_営業日'] ? o['取消_営業日'] + '営業日で約定しなければ取消' : ''), expired: o['取消_営業日'] ? age >= o['取消_営業日'] : false, cancelDays: o['取消_営業日'] || null });
       } else if (s === '保有中' || s === '一部利確') {
         const limit = deadline(data, t);
         const left = cal.bdays(T, limit);
@@ -156,17 +156,19 @@
         const n = t['約定株数'], rem = remQty(t);
         const tpPrice = Math.round(t['約定価格'] + (t['約定価格'] - t['損切り価格']) * lvl);
         const part = pct >= 100 ? n : (n > unit ? Math.floor(n * pct / 100 / unit) * unit : 0);
-        const h = { t, state: s, rem, limit: iso(limit), left, orders: [], checks: [] };
+        // stopPrice：いま置いておく損切りの逆指値（一部利確後は建値）。checks：AIが毎日見る売る条件。noTp：1単元で分割利確が無い
+        const h = { t, state: s, rem, limit: iso(limit), left, orders: [], checks: [], stopPrice: s === '一部利確' ? t['約定価格'] : t['損切り価格'], noTp: false };
         if (left <= 0) h.orders.push({ kind: '成行売り（寄付）', qty: rem, why: '期限' });
         else if (s === '保有中') {
           if (part) h.orders.push({ kind: '指値売り', price: tpPrice, qty: part, why: '利確（+' + lvl + 'R）。置いてあれば何もしない' });
-          else h.checks.push('1単元のため分割利確なし');
+          else h.noTp = true;
           if (trail && trail !== 'なし') h.checks.push(trail);
         } else {
           h.orders.push({ kind: '逆指値売りを変更', price: t['約定価格'], qty: rem, why: '半分利確後は建値へ。済んでいれば何もしない' });
           if (trail && trail !== 'なし') h.checks.push(trail);
         }
         h.checks.push('決算・材料の発表');
+        if (h.noTp) h.checks.push('1単元のため分割利確なし');
         out.hold.push(h);
       }
     });

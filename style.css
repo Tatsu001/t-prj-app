@@ -127,3 +127,14 @@ textarea{min-height:4.5em;resize:vertical} input:focus,select:focus,textarea:foc
 .key{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;padding:4px 8px;min-height:0;border:1px dashed var(--line);border-radius:6px;background:var(--surface);color:var(--muted);justify-self:start;cursor:pointer}
 .preview{font-size:14px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:8px;padding:8px 12px} .preview>span{font-size:12px} .preview ul{margin:2px 0 0;padding-left:1.3em} .preview li{margin:2px 0}
 .cond{display:grid;gap:8px;padding:10px 0;border-top:1px solid var(--line-soft)} .hx{display:flex;gap:6px} .hx select{flex:1;min-width:0} .b.x{min-height:44px;padding:0 14px;margin-left:0;font-size:18px}
+
+/* 今日・取引・候補（UXレビュー反映） */
+.ord.off{opacity:.55} .pill-acc{background:var(--accent-soft);color:var(--accent)}
+.form.three{grid-template-columns:repeat(3,1fr)} .grp>summary .sum{display:block;font-size:13px;color:var(--muted);font-weight:400;margin-top:2px}
+.ro{min-height:44px;display:flex;align-items:center;font-variant-numeric:tabular-nums;font-size:16px}
+.row.dh{min-height:0;padding:8px 0 2px} .row.dh .r1 b{color:var(--muted);font-size:12px;font-weight:600}
+.cond4{display:grid;gap:4px;padding:8px 0;border-top:1px solid var(--line-soft)} .cond4:first-child{border-top:0}
+.hold h4{margin-top:10px} .hold h4 small{font-weight:400;margin-left:8px}
+.bar .sh{margin:0} .verdict{margin-bottom:10px} section>.verdict{margin-top:14px}
+.foot#last-update{margin-top:-6px;padding-top:0}
+.grp>summary small{font-weight:400;font-size:12px;color:var(--muted);margin-left:8px}
