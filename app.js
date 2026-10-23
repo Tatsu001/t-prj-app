@@ -127,8 +127,9 @@
   function condBuilder(conds) {
     const rows = conds.length ? conds : [{ '項目': '', '比較': '以上', '値': '' }];
     const opts = (sel) => `<option value="">—</option>` + CAT().map((x) => `<option value="${E(x.key)}" ${x.key === sel ? 'selected' : ''}>${E(x.key)}${x['単位'] ? `（${E(x['単位'])}）` : ''}</option>`).join('');
-    const pickBox = (c, r) => { const w = Array.isArray(c['値']) ? c['値'] : (c['値'] ? [c['値']] : []); return `<div class="f span"><span>当てはまるもの（複数可）</span><div class="picks">${(catItem(c['項目'])['選択肢'] || []).map((o) => `<label class="chk"><input type="checkbox" name="cv${r}" value="${E(o)}" ${w.includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div></div>`; };
-    return `<h4>スクリーナーの条件</h4><p class="note">項目を選び、以上か以下と数字を入れる（市場区分と業種は当てはまるものにチェック）。項目の一覧に無い条件は書けない</p>${rows.map((c, r) => `<div class="form cols cond"><label class="f"><span>項目</span><select name="ck${r}">${opts(c['項目'])}</select></label>${isPick(c['項目']) ? pickBox(c, r) : `<label class="f"><span>以上／以下</span><select name="co${r}"><option ${c['比較'] === '以上' ? 'selected' : ''}>以上</option><option ${c['比較'] === '以下' ? 'selected' : ''}>以下</option></select></label><label class="f"><span>数字${c['項目'] && catItem(c['項目']) && catItem(c['項目'])['単位'] ? `（${E(catItem(c['項目'])['単位'])}）` : ''}</span><input name="cv${r}" type="number" step="any" inputmode="decimal" value="${E(Array.isArray(c['値']) ? '' : c['値'])}"></label>`}<div class="btns"><button type="button" class="b quiet danger" data-act="del-cond" data-r="${r}">この条件を消す</button></div></div>`).join('')}<div class="btns"><button type="button" class="b" data-act="add-cond">条件を足す</button></div>`;
+    const pickBox = (c, r) => { const w = Array.isArray(c['値']) ? c['値'] : (c['値'] ? [c['値']] : []); return `<div class="f"><span>当てはまるもの（複数可）</span><div class="picks">${(catItem(c['項目'])['選択肢'] || []).map((o) => `<label class="chk"><input type="checkbox" name="cv${r}" value="${E(o)}" ${w.includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div></div>`; };
+    const unit = (c) => ((catItem(c['項目']) || {})['単位'] || '');
+    return `<h4>スクリーナーの条件<small>全部そろった銘柄が候補になる</small></h4>${rows.map((c, r) => `<div class="cond"><div class="f"><span>項目</span><div class="hx"><select name="ck${r}">${opts(c['項目'])}</select><button type="button" class="b quiet x" data-act="del-cond" data-r="${r}" aria-label="この条件を消す">×</button></div></div>${isPick(c['項目']) ? pickBox(c, r) : `<div class="form cols"><label class="f"><span>以上／以下</span><select name="co${r}"><option ${c['比較'] === '以上' ? 'selected' : ''}>以上</option><option ${c['比較'] === '以下' ? 'selected' : ''}>以下</option></select></label><label class="f"><span>値${unit(c) ? `（${E(unit(c))}）` : ''}</span><input name="cv${r}" type="number" step="any" inputmode="decimal" value="${E(Array.isArray(c['値']) ? '' : c['値'])}"></label></div>`}</div>`).join('')}<div class="btns"><button type="button" class="b" data-act="add-cond">条件を足す</button></div>`;
   }
   function candState(c) {
     if (c['絞り込み'] && c['絞り込み'] !== '可') return '見送り';
@@ -371,39 +372,69 @@ ${grp('エントリー', fld('条件が出た日', '型が出た日', c['型が�
   }
   const principleForm = (p, i) => `<form id="f-principle" class="form" data-i="${i}">${fld('番号', 'id', p.id, { type: 'number' })}${fld('見出し', 'title', p.title)}${fld('本文', 'text', p.text, { type: 'textarea', rows: 2 })}${fld('出典', '出典', p['出典'])}<div class="btns"><button class="b primary" data-act="save-principle">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button><button class="b quiet danger" data-act="del-principle" type="button">削除</button></div></form>`;
 
+  const STATE_DESC = { '採用': 'いま使っている', '代替案': '月次の見直しで採用と比べる控え。2つまで', '不採用': '記録として残す' };
+  // 数値欄の各キーを、どの計算・作業が読むか（フォームの札）
+  const USE = { '候補上限_件': 'スクリーナー', '損切り幅下限_pct': '型の判定', '損切り幅上限_pct': '型の判定', '乖離_pct': '発注価格', '取消_営業日': '注文の期限', '追わない上限_pct': 'AIの判定', '1R_pct': '株数', '1R上限_pct': '株数', '1銘柄上限_pct': '株数', '利確水準_R': '利確の注文', '利確割合_pct': '利確の注文', 'トレーリング': '利確の注文', '最大保有_営業日': '期限', '解除前_営業日': '期限', '決算前_営業日': '期限', '再エントリー_営業日': 'AIの判定', '同時保有上限': '新規買いの関門', '現金下限_pct': '新規買いの関門', '合計リスク上限_pct': '新規買いの関門', '同セクター上限': '新規買いの関門', '移動平均_日': '地合い', '先物夜間_pct': '地合い', '損切り直後ロット_pct': 'ロットと停止', '連敗停止': 'ロットと停止', '停止_営業日': 'ロットと停止', '段階1_pct': 'ロットと停止', '段階1ロット_pct': 'ロットと停止', '段階2_pct': 'ロットと停止', '段階3_pct': 'ロットと停止', '周期_月': '月次の見直し', '最小件数': '月次の見直し', '不採用判断': '月次の見直し', '改定後慎重': '月次の見直し' };
+  const UNIT = [['_pct', '%'], ['_億', '億円'], ['_営業日', '営業日'], ['_日', '日'], ['_R', 'R'], ['_月', 'か月'], ['_件', '件']];
+  const numText = (k, v) => { const u = UNIT.find(([x]) => k.endsWith(x)); return `<b>${E(u ? k.slice(0, -u[0].length) : k)}</b> ${E(v)}${u && !isNaN(Number(v)) ? E(u[1]) : ''}`; };
+  // 文章の {キー} に数値欄の値を入れる。数字は数値欄にだけ置く決まり
+  const fill = (t, s) => String(t || '').replace(/\{([^{}]+)\}/g, (m, k) => { const v = (s['数値欄'] || {})[k]; return v == null || v === '' ? '—' : String(v); });
+  const previewHtml = (ls, nums) => `<span>表示</span><ul>${ls.map((x) => `<li>${E(fill(x, { '数値欄': nums }))}</li>`).join('')}</ul>`;
+  const previewFromForm = (f) => { const v = fd(f), nums = {}; (Q(f.dataset.q)['数値欄のキー'] || []).forEach((k) => { nums[k] = v['n:' + k]; }); return previewHtml(lines(v['当てはまる条件']), nums); };
+  // 採用の枠：区分ごとに1つ。calc と同じ選び方で出すので、画面とAIの見方がずれない
+  const adoptRows = (q) => {
+    const ad = q['戦略'].filter((s) => s['状態'] === '採用');
+    const kinds = ad.some((s) => s['区分'] !== '共通') ? ['IPO', '通常'] : ['共通'];
+    return kinds.map((k) => { const s = Calc.adopted(data['問い'], q.num, k === '共通' ? undefined : k); const borrowed = s && k !== '共通' && s['区分'] !== k && s['区分'] !== '共通';
+      return `<div class="arow"><span class="ak">${E(k)}</span>${s ? `<b>${E(s.name)}</b>${borrowed ? `<span class="pill pill-warn">${E(s['区分'])}の採用を流用</span>` : ''}` : '<span class="pill pill-ng">なし</span>'}</div>`; }).join('');
+  };
   function viewRule(num) {
     const q = Q(num); if (!q) return viewRules();
     const sel = `<select class="qsel">${data['問い'].map((x) => `<option value="${x.num}" ${x.num === q.num ? 'selected' : ''}>${x.num} ${E(x.name)}</option>`).join('')}</select>`;
     const def = q['定義'];
     const defs = `<details class="fold"><summary>この項目で決めること</summary><dl class="def"><dt>決めること</dt><dd>${E(def['決めること'])}</dd><dt>決めないこと</dt><dd>${E(def['決めないこと'])}</dd><dt>選び方</dt><dd>${E(def['選び方'])}</dd></dl></details>`;
-    const order = { '採用': 0, '代替案': 1, '不採用': 2 };
-    const idx = q['戦略'].map((s, i) => i).sort((a, b) => order[q['戦略'][a]['状態']] - order[q['戦略'][b]['状態']]);
-    const cards = idx.map((i) => { const s = q['戦略'][i];
-      if (edit && edit.type === 'strategy' && edit.q === q.num && edit.idx === i) return strategyForm(q, s, i);
-      return s['状態'] === '採用' ? strategyCard(q, s, i) : `<details class="fold strat-fold" id="s-${E(s.name)}"><summary>${E(s.name)} ${pill(s['状態'])}${s['区分'] !== '共通' ? `<span class="pill">${E(s['区分'])}</span>` : ''}</summary>${strategyCard(q, s, i)}</details>`; }).join('');
-    const add = edit && edit.type === 'strategy' && edit.q === q.num && edit.idx === -1 ? strategyForm(q, blankStrategy(q), -1) : `<div class="btns"><button class="b" data-act="edit-strategy" data-q="${q.num}" data-i="-1">追加</button></div>`;
-    return shell(`<h1 class="qh">${sel}</h1><p class="lead">${E(q.question)}</p>${defs}<p class="adopt">採用中　${E(adoptedText(q))}</p><section>${cards}${add}</section>`);
+    const editing = (i) => edit && edit.type === 'strategy' && edit.q === q.num && edit.idx === i;
+    const card = (s, i, state) => editing(i) ? strategyForm(q, s, i) : state === '採用' ? strategyCard(q, s, i)
+      : `<details class="fold strat-fold" id="s-${E(s.name)}"><summary>${E(s.name)}${s['区分'] !== '共通' ? ` <span class="pill">${E(s['区分'])}</span>` : ''}<span class="sum">${E(fill(s['一言で'], s))}</span></summary>${strategyCard(q, s, i)}</details>`;
+    const section = (state) => {
+      const g = q['戦略'].map((s, i) => [s, i]).filter(([s]) => s['状態'] === state);
+      if (!g.length && state === '不採用') return '';
+      const addBtn = state === '代替案' ? (editing(-1) ? strategyForm(q, blankStrategy(q), -1) : `<div class="btns"><button class="b" data-act="edit-strategy" data-q="${q.num}" data-i="-1">戦略を追加</button></div>`) : '';
+      return `<section><h2 class="sh">${E(state)}<small>${E(STATE_DESC[state])}</small></h2>${state === '採用' ? `<div class="adoptbox">${adoptRows(q)}</div>` : ''}${g.length ? g.map(([s, i]) => card(s, i, state)).join('') : '<p class="empty">なし</p>'}${addBtn}</section>`;
+    };
+    return shell(`<h1 class="qh">${sel}</h1><p class="lead">${E(q.question)}</p>${defs}${section('採用')}${section('代替案')}${section('不採用')}`);
   }
   const blankStrategy = (q) => ({ name: '', '状態': '代替案', '改定日': todayISO(), '区分': '共通', '一言で': '', '当てはまる条件': [], 'しないこと': [], '出典': '', '数値欄': Object.fromEntries((q['数値欄のキー'] || []).map((k) => [k, null])) });
-  // 文章の {キー} に数値欄の値を入れる。数字は数値欄にだけ置く決まり
-  const fill = (t, s) => String(t || '').replace(/\{([^{}]+)\}/g, (m, k) => { const v = (s['数値欄'] || {})[k]; return v == null || v === '' ? '—' : String(v); });
   function strategyCard(q, s, i) {
-    const li = (a) => (Array.isArray(a) ? a : lines(a)).map((x) => `<li>${E(fill(x, s))}</li>`).join('');
-    const nums = Object.entries(s['数値欄'] || {}).filter(([k, v]) => v != null && v !== '').map(([k, v]) => `<span><b>${E(keyLabel(k))}</b> ${E(v)}</span>`).join('');
-    const sec = (title, body) => (body ? `<h4>${title}</h4>${body}` : '');
-    return `<article class="strat ${s['状態'] === '不採用' ? 'off' : ''}" id="s-${E(s.name)}"><header><h3>${E(s.name)}</h3>${pill(s['状態'])}${s['区分'] !== '共通' ? `<span class="pill">${E(s['区分'])}</span>` : ''}</header>
-<p class="one">${E(fill(s['一言で'], s))}</p>${sec('条件', `<ul>${li(s['当てはまる条件'])}</ul>`)}${nums ? `<div class="k">${nums}</div>` : ''}
-<details class="fold"><summary>詳細</summary>${sec('禁止', (s['しないこと'] || []).length ? `<ul>${li(s['しないこと'])}</ul>` : '')}${sec('出典', s['出典'] ? `<p>${linkify(s['出典'])}</p>` : '')}<p class="rev">改定 ${E(s['改定日'])}</p></details>
-<div class="btns"><button class="b quiet" data-act="edit-strategy" data-q="${q.num}" data-i="${i}">編集</button></div></article>`;
+    const li = (a) => (a || []).map((x) => `<li>${E(fill(x, s))}</li>`).join('');
+    const nums = Object.entries(s['数値欄'] || {}).filter(([k, v]) => v != null && v !== '').map(([k, v]) => `<span>${numText(k, v)}</span>`).join('');
+    const st = s['状態'], a = (act, label, cls) => `<button class="b ${cls || ''}" data-act="${act}" data-q="${q.num}" data-i="${i}">${label}</button>`;
+    const acts = [a('edit-strategy', '編集', 'quiet')];
+    if (st === '代替案') acts.push(a('adopt', '採用にする'), a('retire', '不採用にする', 'quiet'));
+    if (st === '不採用') acts.push(a('restore', '代替案に戻す'));
+    return `<article class="strat ${st === '不採用' ? 'off' : ''}" id="s-${E(s.name)}"><header><h3>${E(s.name)}</h3>${s['区分'] !== '共通' ? `<span class="pill">${E(s['区分'])}</span>` : ''}</header>
+<p class="one">${E(fill(s['一言で'], s))}</p>
+<h4>当てはまる条件<small>全部そろって動く</small></h4><ul>${li(s['当てはまる条件'])}</ul>${nums ? `<div class="k">${nums}</div>` : ''}
+<h4>しないこと<small>1つでも当たれば注文しない</small></h4>${(s['しないこと'] || []).length ? `<ul class="ng">${li(s['しないこと'])}</ul>` : '<p class="empty">なし</p>'}
+<p class="rev">${s['出典'] ? `出典　${linkify(s['出典'])}　` : ''}改定 ${E(s['改定日'])}</p>
+<div class="btns">${acts.join('')}</div></article>`;
   }
   function strategyForm(q, s0, i) {
     // 条件の行を足し引きして描き直した時に、入力途中の文字を失わないよう、下書き（edit.draft）を優先する
-    const d = (edit && edit.draft) || {}, s = Object.assign({}, s0, Object.fromEntries(['name', '状態', '区分', '一言で', '出典'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]]))); if (d['しないこと'] !== undefined) s['しないこと'] = lines(d['しないこと']); if (d['当てはまる条件'] !== undefined) s['当てはまる条件'] = lines(d['当てはまる条件']);
-    const numf = (q['数値欄のキー'] || []).map((k) => fld(keyLabel(k), 'n:' + k, d['n:' + k] !== undefined ? d['n:' + k] : (s['数値欄'] ? s['数値欄'][k] : ''))).join('');
-    return `<form id="f-strategy" class="strat form" data-q="${q.num}" data-i="${i}"><div class="form cols">${fld('戦略名', 'name', s.name)}${fld('状態', '状態', s['状態'], { type: 'select', options: ['採用', '代替案', '不採用'] })}${fld('区分', '区分', s['区分'], { type: 'select', options: ['共通', 'IPO', '通常'] })}</div>
-${fld('一言で', '一言で', s['一言で'])}${q.num === 1 ? condBuilder(edit && edit.cond ? edit.cond : (s['スクリーナー条件'] || [])) : fld('条件（1行1つ）', '当てはまる条件', text(s['当てはまる条件']), { type: 'textarea' })}${fld('禁止（1行1つ）', 'しないこと', text(s['しないこと']), { type: 'textarea', rows: 3 })}
-${fld('出典', '出典', s['出典'], { type: 'textarea', rows: 2 })}
-${numf ? `<h4>数値</h4><p class="note">数字はここにだけ入れる。条件の文章では {${E((q['数値欄のキー'] || [])[0] || 'キー')}} のようにキー名で書くと、表示の時にこの数字が入る</p><div class="form cols">${numf}</div>` : ''}${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
+    const d = (edit && edit.draft) || {}, s = Object.assign({}, s0, Object.fromEntries(['name', '区分', '一言で', '出典'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]]))); if (d['しないこと'] !== undefined) s['しないこと'] = lines(d['しないこと']); if (d['当てはまる条件'] !== undefined) s['当てはまる条件'] = lines(d['当てはまる条件']);
+    const numv = (k) => { const v = d['n:' + k] !== undefined ? d['n:' + k] : (s['数値欄'] ? s['数値欄'][k] : ''); return v == null ? '' : v; };
+    const nums = Object.fromEntries((q['数値欄のキー'] || []).map((k) => [k, numv(k)]));
+    const numf = (q['数値欄のキー'] || []).map((k) => `<label class="f"><span>${E(keyLabel(k))}${USE[k] ? `<span class="pill">${E(USE[k])}</span>` : ''}</span><input name="n:${E(k)}" value="${E(numv(k))}" inputmode="decimal">${q.num !== 1 ? `<button type="button" class="key" data-act="ins-key" data-k="${E(k)}">{${E(k)}}</button>` : ''}</label>`).join('');
+    const kub = ['共通', 'IPO', '通常'].map((v) => `<label class="chk"><input type="radio" name="区分" value="${v}" ${s['区分'] === v ? 'checked' : ''}> ${v}</label>`).join('');
+    const condField = q.num === 1 ? condBuilder(edit && edit.cond ? edit.cond : (s['スクリーナー条件'] || []))
+      : `<label class="f"><span>当てはまる条件<small>全部そろって動く</small></span><textarea name="当てはまる条件" rows="5" placeholder="1行に1つ">${E(text(s['当てはまる条件']))}</textarea></label><div class="preview" id="cond-preview">${previewHtml(s['当てはまる条件'] || [], nums)}</div>`;
+    return `<form id="f-strategy" class="strat form editing" data-q="${q.num}" data-i="${i}"><h3>${i >= 0 ? E(s0.name) + ' を編集' : '戦略を追加'}</h3>
+${fld('戦略名', 'name', s.name)}<div class="f"><span>区分</span><div class="picks">${kub}</div></div>${fld('一言で', '一言で', s['一言で'])}
+${condField}
+${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}
+<label class="f"><span>しないこと<small>1つでも当たれば注文しない</small></span><textarea name="しないこと" rows="4" placeholder="1行に1つ">${E(text(s['しないこと']))}</textarea></label>
+<label class="f"><span>出典</span><textarea name="出典" rows="2" placeholder="テスタ スイング2、docs/basics/04">${E(s['出典'])}</textarea></label>
+${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
 <div class="btns"><button class="b primary" data-act="save-strategy">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button>${i >= 0 ? '<button class="b quiet danger" data-act="del-strategy" type="button">削除</button>' : ''}</div></form>`;
   }
 
@@ -484,6 +515,10 @@ ${numf ? `<h4>数値</h4><p class="note">数字はここにだけ入れる。条
     if (doc) { try { const t = await readText(doc.dataset.path); doc.innerHTML = mdToHtml(t, doc.dataset.path); window.scrollTo(0, 0); } catch (e) { doc.innerHTML = `<p class="empty">${E(e.message)}</p>`; } }
   }
   window.addEventListener('hashchange', () => { edit = null; render(); if (!/^#(rule|docs)\/.+\/.+/.test(location.hash)) window.scrollTo(0, 0); });
+  app.addEventListener('input', (e) => {
+    const f = e.target.closest && e.target.closest('#f-strategy'); if (!f) return;
+    const pv = document.getElementById('cond-preview'); if (pv) pv.innerHTML = previewFromForm(f);
+  });
   app.addEventListener('change', (e) => {
     if (/^ck\d+$/.test(e.target.name || '')) { const f = document.getElementById('f-strategy'); const rows = readRows(f); const r = Number(e.target.name.slice(2)); rows[r]['値'] = isPick(rows[r]['項目']) ? [] : ''; rows[r]['比較'] = isPick(rows[r]['項目']) ? 'いずれか' : '以上'; edit.cond = rows; edit.draft = fd(f); render(); return; }
     if (e.target.classList.contains('qsel')) location.hash = '#rule/' + e.target.value;
@@ -504,6 +539,12 @@ ${numf ? `<h4>数値</h4><p class="note">数字はここにだけ入れる。条
       const f = document.getElementById('f-strategy'), rows = readRows(f);
       if (act === 'add-cond') rows.push({ '項目': '', '比較': '以上', '値': '' }); else rows.splice(Number(b.dataset.r), 1);
       edit.cond = rows; edit.draft = fd(f); render(); return;
+    }
+    if (act === 'ins-key') {
+      const f = document.getElementById('f-strategy'), ta = f && f.querySelector('textarea[name="当てはまる条件"]'); if (!ta) return;
+      const k = '{' + b.dataset.k + '}', focused = document.activeElement === ta, a = focused ? ta.selectionStart : ta.value.length, z = focused ? ta.selectionEnd : a;  // 文章を触っていなければ末尾に足す
+      ta.value = ta.value.slice(0, a) + k + ta.value.slice(z); ta.focus(); ta.setSelectionRange(a + k.length, a + k.length);
+      const pv = document.getElementById('cond-preview'); if (pv) pv.innerHTML = previewFromForm(f); return;
     }
     if (act === 'edit-hist') { edit = { type: 'hist' }; render(); return; }
     if (act === 'clear-cfg') { cfg.token = ''; localStorage.setItem(KEY, JSON.stringify(cfg)); loaded = false; location.hash = '#settings'; render(); return; }
@@ -526,10 +567,12 @@ ${numf ? `<h4>数値</h4><p class="note">数字はここにだけ入れる。条
     if (act === 'save-strategy') {
       const f = document.getElementById('f-strategy'), v = fd(f), q = Q(f.dataset.q), idx = Number(f.dataset.i);
       if (!v.name.trim()) { msg = { ng: true, text: '戦略名を入れる' }; showToast(); return; }
+      if (!(v['出典'] || '').trim()) { msg = { ng: true, text: '出典を入れる。出典のない戦略は置かない' }; showToast(); return; }
       const old = idx >= 0 ? q['戦略'][idx] : null;
-      const s = { name: v.name.trim(), '状態': v['状態'], '改定日': todayISO(), '区分': v['区分'], '一言で': v['一言で'], '当てはまる条件': lines(v['当てはまる条件']), 'しないこと': lines(v['しないこと']),
-        '出典': v['出典'], '数値欄': {} };
+      if (!old && q['戦略'].filter((x) => x['状態'] === '代替案').length >= 2) { msg = { ng: true, text: '代替案は2つまで。先に1つ不採用にする' }; showToast(); return; }
+      const s = { name: v.name.trim(), '状態': old ? old['状態'] : '代替案', '改定日': todayISO(), '区分': v['区分'] || '共通', '一言で': v['一言で'], '当てはまる条件': lines(v['当てはまる条件']), 'しないこと': lines(v['しないこと']), '出典': v['出典'], '数値欄': {} };
       (q['数値欄のキー'] || []).forEach((k) => { s['数値欄'][k] = numOrNull(v['n:' + k]); });
+      if (s['状態'] === '採用') { const dup = q['戦略'].find((x) => x !== old && x['状態'] === '採用' && (s['区分'] === '共通' || x['区分'] === '共通' || x['区分'] === s['区分'])); if (dup) { msg = { ng: true, text: `${dup.name} が${dup['区分'] === '共通' ? '' : dup['区分'] + 'の'}採用。採用は区分ごとに1つ` }; showToast(); return; } }
       if (q.num === 1) {
         s['スクリーナー条件'] = readCond(f);
         if (s['スクリーナー条件'].some((c) => !catItem(c['項目']))) { msg = { ng: true, text: '項目の一覧に無い条件がある' }; showToast(); return; }
@@ -539,13 +582,35 @@ ${numf ? `<h4>数値</h4><p class="note">数字はここにだけ入れる。条
       if (old && old.name !== s.name) { data['取引'].forEach((t) => { Object.keys(TKEY).forEach((k) => { if (t[k] === old.name) t[k] = s.name; }); }); }
       if (idx >= 0) q['戦略'][idx] = s; else q['戦略'].push(s);
       const condChanged = q.num === 1 && old && JSON.stringify(old['スクリーナー条件'] || []) !== JSON.stringify(s['スクリーナー条件']);
-      const change = !old ? '追加' : old['状態'] !== s['状態'] ? s['状態'] : condChanged ? '条件変更' : JSON.stringify(old['数値欄']) !== JSON.stringify(s['数値欄']) ? '数値変更' : '文言変更';
+      const change = !old ? '追加' : condChanged ? '条件変更' : JSON.stringify(old['数値欄']) !== JSON.stringify(s['数値欄']) ? '数値変更' : '文言変更';
       const before = !old ? '' : change === '数値変更' ? JSON.stringify(old['数値欄']) : change === '条件変更' ? (old['スクリーナー条件'] || []).map(condText).join('、') : old['状態'];
       const after_ = change === '数値変更' ? JSON.stringify(s['数値欄']) : change === '条件変更' ? s['スクリーナー条件'].map(condText).join('、') : s['状態'];
       data['改定履歴'].push({ '日付': todayISO(), '問い': String(q.num), '戦略': s.name, '変更': change, '変更前': before, '変更後': after_, '理由': v.reason || '', '件数': data['取引'].filter((t) => cstate(t) === '決済済み' && Object.keys(TKEY).some((k) => t[k] === s.name)).length });
       const ok = await save('問い', `${q.num} ${q.name} ${s.name}：${change}`);
       if (ok) { await save('改定履歴', `改定履歴：${q.num} ${s.name}`); if (old && old.name !== s.name) await save('取引', '戦略名の変更を取引に反映'); edit = null; }
       render(); return;
+    }
+    if (act === 'adopt' || act === 'retire' || act === 'restore') {
+      const q = Q(b.dataset.q), s = q['戦略'][i];
+      const hist = (st, x) => data['改定履歴'].push({ '日付': todayISO(), '問い': String(q.num), '戦略': x.name, '変更': st, '変更前': x['状態'], '変更後': st, '理由': '', '件数': data['取引'].filter((t) => cstate(t) === '決済済み' && Object.keys(TKEY).some((k) => t[k] === x.name)).length });
+      if (act === 'adopt') {
+        const rivals = q['戦略'].filter((x) => x !== s && x['状態'] === '採用' && (s['区分'] === '共通' || x['区分'] === '共通' || x['区分'] === s['区分']));
+        const who = s['区分'] === '共通' ? '採用' : s['区分'] + 'の採用', names = rivals.map((x) => x.name).join('・');
+        if (!confirm(rivals.length ? `${who}を ${names} → ${s.name} に替える。${names} は代替案になる` : `${s.name} を${who}にする`)) return;
+        rivals.forEach((x) => { hist('代替案', x); x['状態'] = '代替案'; x['改定日'] = todayISO(); });
+        hist('採用', s); s['状態'] = '採用'; s['改定日'] = todayISO();
+        if (await save('問い', `${q.num} ${q.name}：${who}を ${s.name} に`)) await save('改定履歴', '改定履歴：採用の入れ替え');
+        render(); return;
+      }
+      if (act === 'retire') {
+        if (s['状態'] === '採用') { msg = { ng: true, text: '採用は入れ替えでしか外せない。別の戦略を「採用にする」' }; showToast(); return; }
+        if (!confirm(`${s.name} を不採用にする`)) return;
+        hist('不採用', s); s['状態'] = '不採用'; s['改定日'] = todayISO();
+        if (await save('問い', `${q.num} ${q.name}：${s.name} を不採用に`)) await save('改定履歴', '改定履歴：不採用'); render(); return;
+      }
+      if (q['戦略'].filter((x) => x['状態'] === '代替案').length >= 2) { msg = { ng: true, text: '代替案は2つまで。先に1つ不採用にする' }; showToast(); return; }
+      hist('代替案', s); s['状態'] = '代替案'; s['改定日'] = todayISO();
+      if (await save('問い', `${q.num} ${q.name}：${s.name} を代替案に`)) await save('改定履歴', '改定履歴：代替案に戻す'); render(); return;
     }
     if (act === 'del-strategy') {
       const f = document.getElementById('f-strategy'), q = Q(f.dataset.q), idx = Number(f.dataset.i), s = q['戦略'][idx];

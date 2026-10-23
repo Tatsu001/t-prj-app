@@ -114,3 +114,16 @@ textarea{min-height:4.5em;resize:vertical} input:focus,select:focus,textarea:foc
 
 .picks{display:flex;flex-wrap:wrap;gap:6px 14px;padding:4px 0}
 .picks .chk{margin:0;font-size:.95em}
+
+/* ルールの1項目：状態ごとの見出し、採用の枠、カード、編集フォーム */
+.sh{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:18px 0 8px} .sh small{font-size:12px;font-weight:400;color:var(--muted)}
+.adoptbox{background:var(--ok-bg);border-radius:8px;padding:8px 12px;margin-bottom:10px;display:grid;gap:4px} .arow{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:15px} .arow .ak{color:var(--ok);font-weight:600;min-width:3em}
+.strat h4{margin-top:12px} .strat h4 small{font-weight:400;margin-left:8px}
+.strat ul.ng{list-style:none;padding-left:1.3em} .strat ul.ng li::before{content:"×";color:var(--ng);display:inline-block;width:1.3em;margin-left:-1.3em}
+.strat .empty{margin:2px 0 0;font-size:14px}
+.strat-fold>summary .sum{display:block;font-size:13px;color:var(--muted);font-weight:400;margin-top:2px}
+.form.editing{background:var(--accent-soft)} .form.editing h3{margin-bottom:2px}
+.f>span small{font-weight:400;margin-left:6px} .f>span .pill{margin-left:6px}
+.key{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;padding:4px 8px;min-height:0;border:1px dashed var(--line);border-radius:6px;background:var(--surface);color:var(--muted);justify-self:start;cursor:pointer}
+.preview{font-size:14px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:8px;padding:8px 12px} .preview>span{font-size:12px} .preview ul{margin:2px 0 0;padding-left:1.3em} .preview li{margin:2px 0}
+.cond{display:grid;gap:8px;padding:10px 0;border-top:1px solid var(--line-soft)} .hx{display:flex;gap:6px} .hx select{flex:1;min-width:0} .b.x{min-height:44px;padding:0 14px;margin-left:0;font-size:18px}
