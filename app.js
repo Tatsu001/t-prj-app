@@ -307,10 +307,35 @@ ${pre['月初資金'] !== st.cash ? `<div class="btns"><button class="b" data-ac
 ${sec(`決済済み ${closed.length}`, closed)}${other.length ? sec('取消', other) : ''}`);
   }
   const blankTrade = () => ({ id: Math.max(0, ...data['取引'].map((t) => t.id)) + 1, 'コード': '', '銘柄名': '', '区分': '通常', '型': '', '利確': '', '注文': '', '期限': '', '追加': '', '記録日': todayISO(), '基準価格': null, '損切り価格': null, '発注価格': null, '株数': null, '約定日': null, '約定価格': null, '約定株数': null, 'イベント日': null, 'イベント種別': null, '売り': [], '状態': '', '人の判定': '', 'AIの判定': '', 'メモ': '' });
+  const mark = (v) => (v === '○' ? '<span class="pill pill-ok">○</span>' : v === '×' ? '<span class="pill pill-ng">×</span>' : '<span class="pill">未</span>');
+  const card = (title, body, sub) => `<section class="scr"><h4>${title}${sub ? `<small>${E(sub)}</small>` : ''}</h4>${body}</section>`;
+  const facts = (rows) => `<dl class="facts">${rows.filter(([, v]) => v != null && v !== '').map(([k, v]) => `<div><dt>${E(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   function viewTrade(key) {
     const i = key === 'new' ? -1 : Number(key);
     const t = i >= 0 ? data['取引'][i] : blankTrade();
     if (!t) return viewTrades();
+    if (i >= 0 && !(edit && edit.type === 'trade' && edit.idx === i)) return tradeRead(i, t);
+    return tradeForm(i, t);
+  }
+  // 読む画面。直す時だけ「直す」で編集に入る
+  function tradeRead(i, t) {
+    const s = cstate(t), holding = s === '保有中' || s === '一部利確';
+    const h = holding ? (Calc.orders(data, todayISO()).hold.find((x) => x.t === t) || {}) : {};
+    const o = s === '注文中' ? (Calc.orders(data, todayISO()).new.find((x) => x.t === t) || {}) : {};
+    const p = Calc.pl(t), r = Calc.rValue(t);
+    const rules = ['型', '注文', '利確', '期限'].filter((k) => t[k]).map((k) => `<a href="#rule/${TQ[k]}/${encodeURIComponent(t[k])}">${E(t[k])}</a>`).join('・');
+    const sells = (t['売り'] || []).map((x, k) => `<div><dt>${k + 1}回目 ${E(dShort(x['日付']))}</dt><dd>${yen(x['価格'])}円 × ${x['株数']}株</dd></div>`).join('');
+    return shell(`<h1>${E(t['銘柄名'] || '取引')} ${pill(s)}</h1>
+${card('銘柄', `<p>${E(t['コード'])} ${E(t['銘柄名'])}　${E(t['区分'])}</p>`)}
+${card('使うルール', `<p>${rules || '—'}</p>`)}
+${card('発注', facts([['基準価格', yen(t['基準価格']) + '円'], ['損切り価格', yen(t['損切り価格']) + '円'], ['発注価格', yen(t['発注価格']) + '円'], ['株数', (t['株数'] || 0) + '株']]) + (o.expired ? `<p class="warn">${o.cancelDays || ''}営業日で約定なし。引け後に取消になる</p>` : ''), `型が出た日 ${dShort(t['記録日'])}`)}
+${t['約定日'] ? card('約定', facts([['約定日', E(dShort(t['約定日']))], ['約定価格', yen(t['約定価格']) + '円'], ['約定株数', t['約定株数'] + '株']])) : card('約定', '<p class="empty">まだ</p>')}
+${holding || t['イベント日'] ? card('期限', facts([['期限日', h.limit ? `${E(dShort(h.limit))}（あと${h.left}営業日）` : '—'], ['イベント', t['イベント日'] ? `${t['イベント種別'] === '解除' ? 'ロックアップ解除' : '決算発表'} ${E(dShort(t['イベント日']))}` : null]])) : ''}
+${holding || s === '決済済み' ? card('売り', sells ? `<dl class="facts">${sells}</dl>` : '<p class="empty">まだ</p>', s === '決済済み' ? `損益 ${p >= 0 ? '+' : ''}${yen(p)}円　${r >= 0 ? '+' : ''}${r.toFixed(2)}R` : '') : ''}
+${t['AIの判定'] || t['メモ'] ? card('AIの根拠とメモ', `${t['AIの判定'] ? `<p>${E(t['AIの判定'])}</p>` : ''}${t['メモ'] ? `<p class="memo">${E(t['メモ'])}</p>` : ''}`) : ''}
+<div class="btns"><button class="b quiet" data-act="edit-trade" data-i="${i}">直す</button><a class="b quiet" href="#trades">戻る</a></div>`);
+  }
+  function tradeForm(i, t) {
     const s = i >= 0 ? cstate(t) : '', holding = s === '保有中' || s === '一部利確';
     const grp = (title, open, body, sum) => `<details class="grp" ${open ? 'open' : ''}><summary>${title}${sum ? `<span class="sum">${E(sum)}</span>` : ''}</summary><div class="form cols">${body}</div></details>`;
     const sell = (k) => { const x = (t['売り'] || [])[k] || {}; return `<div class="span"><div class="f"><span>${k + 1}回目</span></div><div class="form three">${fld('日付', `s${k}d`, x['日付'], { type: 'date' })}${fld('価格', `s${k}p`, x['価格'], { type: 'number' })}${fld('株数', `s${k}q`, x['株数'], { type: 'number' })}</div></div>`; };
@@ -330,13 +355,31 @@ ${grp('期限', holding, `<div class="f"><span>期限日</span><div class="ro">$
 ${grp('売り', holding, sell(0) + sell(1))}
 ${grp('AIの根拠とメモ', holding || s === '決済済み', `<label class="f span"><span>AIの根拠</span><input name="AIの判定" value="${E(t['AIの判定'])}"></label>` + `<label class="f span"><span>メモ</span><textarea name="メモ" rows="2">${E(t['メモ'])}</textarea></label>`)}
 <input type="hidden" name="id" value="${t.id}">
-<div class="btns"><button class="b primary" data-act="save-trade">保存</button><a class="b quiet" href="#trades">戻る</a>${i >= 0 ? '<button class="b quiet danger" data-act="del-trade" type="button">削除</button>' : ''}</div></form>`);
+<div class="btns"><button class="b primary" data-act="save-trade">保存</button>${i >= 0 ? '<button class="b quiet" data-act="cancel" type="button">取消</button><button class="b quiet danger" data-act="del-trade" type="button">削除</button>' : '<a class="b quiet" href="#trades">戻る</a>'}</div></form>`);
   }
   const blankCand = () => ({ '日付': todayISO(), 'コード': '', '銘柄名': '', '区分': '通常', '上場日': null, '売買代金_億': null, '時価総額_億': null, '終値': null, '絞り込み': '', '判定': [null, null, null, null], '根拠': ['', '', '', ''], '確認': null, '型が出た日': null, 'メモ': '' });
   function viewCand(key) {
     const i = key === 'new' ? -1 : Number(key);
     const c = i >= 0 ? data['候補'][i] : blankCand();
     if (!c) return viewTrades();
+    if (i >= 0 && !(edit && edit.type === 'cand' && edit.idx === i)) return candRead(i, c);
+    return candForm(i, c);
+  }
+  const screenResult = (c) => `${c['絞り込み'] === '可' ? `<a href="#rule/1/${encodeURIComponent(c['戦略'] || '')}">${E(c['戦略'] || '1 スクリーニング')}</a> を通過` : `<span class="pill pill-ng">外れた</span> ${E(c['絞り込み'] || '')}`}`;
+  function candRead(i, c) {
+    const st = candState(c), labels = candLabels(c); while (labels.length < 4) labels.push('条件' + (labels.length + 1));
+    const j = c['判定'] || [], g = c['根拠'] || [];
+    const trade = c['型が出た日'] ? data['取引'].find((t) => t['コード'] === c['コード']) : null;
+    const canConfirm = st === '確認待ち' || (st === '仮判定中' && j.filter((x) => x === '○').length === 4);
+    return shell(`<h1>${E(c['銘柄名'] || '候補銘柄')} ${pill(st)}</h1>
+${card('銘柄', `<p>${E(c['コード'])} ${E(c['銘柄名'])}　${E(c['区分'])}${c['上場日'] ? `　上場 ${E(dShort(c['上場日']))}` : ''}</p>`)}
+${card('スクリーニングの結果', `<p>${screenResult(c)}</p>` + facts([['売買代金（10日平均）', c['売買代金_億'] != null ? E(c['売買代金_億']) + '億円' : null], ['時価総額', c['時価総額_億'] != null ? E(c['時価総額_億']) + '億円' : null], ['終値（通った時）', yen(c['終値']) ? yen(c['終値']) + '円' : null], ['その他', c['メモ'] ? E(c['メモ']) : null]]), dShort(c['日付']))}
+${card('4条件', `<div class="c4">${labels.map((l, k) => `<div class="c4r"><div class="c4h"><span>${E(l)}</span>${mark(j[k])}</div><p>${g[k] ? E(g[k]) : '<span class="empty">根拠なし</span>'}</p></div>`).join('')}</div>
+${c['確認'] ? `<p class="okline">根拠を読んで確認した　${E(dShort(c['確認']))}</p>` : canConfirm ? `<div class="btns"><button class="b primary" data-act="confirm-cand" data-i="${i}">根拠を読んで確認した</button></div>` : ''}`, 'AIの仮判定')}
+${c['型が出た日'] ? `<p class="ai">型が出た ${E(dShort(c['型が出た日']))}${trade ? `　<a href="#trade/${data['取引'].indexOf(trade)}">取引 ${E(cstate(trade))}</a>` : ''}</p>` : ''}
+<div class="btns"><button class="b quiet" data-act="edit-cand" data-i="${i}">直す</button><a class="b quiet" href="#trades">戻る</a></div>`);
+  }
+  function candForm(i, c) {
     const isNew = i < 0;
     const labels = candLabels(c); while (labels.length < 4) labels.push('条件' + (labels.length + 1));
     const j = c['判定'] || [], g = c['根拠'] || [];
@@ -347,12 +390,11 @@ ${grp('AIの根拠とメモ', holding || s === '決済済み', `<label class="f 
     return shell(`<h1>${!isNew ? E(c['銘柄名'] || '候補銘柄') + ' ' + pill(candState(c)) : '候補銘柄を追加'}</h1>
 <form id="f-cand" data-i="${i}">
 ${grp('銘柄', isNew, fld('候補に入った日', '日付', c['日付'], { type: 'date' }) + fld('コード', 'コード', c['コード']) + fld('銘柄名', '銘柄名', c['銘柄名']) + fld('区分', '区分', c['区分'], { type: 'select', options: ['通常', 'IPO'] }) + fld('上場日（IPO）', '上場日', c['上場日'], { type: 'date' }), isNew ? '' : `${c['コード']} ${c['銘柄名']}　${c['区分']}${c['上場日'] ? `　上場 ${dShort(c['上場日'])}` : ''}`)}
-${isNew ? grp('スクリーニング', true, fld('売買代金（億円・10日平均）', '売買代金_億', c['売買代金_億'], { type: 'number', step: '0.1' }) + fld('時価総額（億円）', '時価総額_億', c['時価総額_億'], { type: 'number' }) + fld('終値', '終値', c['終値'], { type: 'number' }) + fld('絞り込み', '絞り込み', c['絞り込み'], { ph: '空欄なら 1 スクリーニングの条件で自動' }))
-  : `<section class="scr"><h4>スクリーニングの結果<small>${E(dShort(c['日付']))}</small></h4><p>${c['絞り込み'] === '可' ? `<a href="#rule/1/${encodeURIComponent(c['戦略'] || '')}">${E(c['戦略'] || '1 スクリーニング')}</a> を通過` : `<span class="pill pill-ng">外れた</span> ${E(c['絞り込み'] || '')}`}</p><dl class="facts"><div><dt>売買代金（10日平均）</dt><dd>${c['売買代金_億'] != null ? E(c['売買代金_億']) + '億円' : '—'}</dd></div><div><dt>時価総額</dt><dd>${c['時価総額_億'] != null ? E(c['時価総額_億']) + '億円' : '—'}</dd></div><div><dt>終値（通った時）</dt><dd>${yen(c['終値']) ? yen(c['終値']) + '円' : '—'}</dd></div><div><dt>その他</dt><dd>${E(c['メモ'] || '—')}</dd></div></dl>${['売買代金_億', '時価総額_億', '終値', '絞り込み'].map((k) => `<input type="hidden" name="${k}" value="${E(c[k] == null ? '' : c[k])}">`).join('')}</section>`}
+${grp('スクリーニング', isNew, fld('売買代金（億円・10日平均）', '売買代金_億', c['売買代金_億'], { type: 'number', step: '0.1' }) + fld('時価総額（億円）', '時価総額_億', c['時価総額_億'], { type: 'number' }) + fld('終値', '終値', c['終値'], { type: 'number' }) + fld('絞り込み', '絞り込み', c['絞り込み'], { ph: '空欄なら 1 スクリーニングの条件で自動' }), isNew ? '' : `${dShort(c['日付'])}　${c['絞り込み'] || '—'}`)}
 ${grp('4条件<small>AIの仮判定。直してよい</small>', true, cond + `<label class="chk span"><input type="checkbox" name="確認" ${c['確認'] ? 'checked' : ''}> 根拠を読んで確認した${c['確認'] ? `　${E(dShort(c['確認']))}` : ''}</label>`)}
 <input type="hidden" name="型が出た日" value="${E(c['型が出た日'] || '')}">${typed}
-${isNew ? `<label class="f"><span>メモ</span><textarea name="メモ" rows="2">${E(c['メモ'])}</textarea></label>` : `<input type="hidden" name="メモ" value="${E(c['メモ'])}">`}
-<div class="btns"><button class="b primary" data-act="save-cand">保存</button><a class="b quiet" href="#trades">戻る</a>${i >= 0 ? '<button class="b quiet danger" data-act="del-cand" type="button">削除</button>' : ''}</div></form>`);
+<label class="f"><span>メモ</span><textarea name="メモ" rows="2">${E(c['メモ'])}</textarea></label>
+<div class="btns"><button class="b primary" data-act="save-cand">保存</button>${i >= 0 ? '<button class="b quiet" data-act="cancel" type="button">取消</button><button class="b quiet danger" data-act="del-cand" type="button">削除</button>' : '<a class="b quiet" href="#trades">戻る</a>'}</div></form>`);
   }
   function screen(c) {
     const st = Calc.adopted(data['問い'], 1, c['区分']) || {};
@@ -560,6 +602,8 @@ ${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
     if (act === 'edit-principle') { edit = { type: 'principle', idx: i }; render(); return; }
     if (act === 'edit-premise') { edit = { type: 'premise' }; render(); return; }
     if (act === 'edit-strategy') { edit = { type: 'strategy', q: Number(b.dataset.q), idx: i }; render(); return; }
+    if (act === 'edit-trade') { edit = { type: 'trade', idx: i }; render(); window.scrollTo(0, 0); return; }
+    if (act === 'edit-cand') { edit = { type: 'cand', idx: i }; render(); window.scrollTo(0, 0); return; }
     if (act === 'add-cond' || act === 'del-cond') {
       const f = document.getElementById('f-strategy'), rows = readRows(f);
       if (act === 'add-cond') rows.push({ '項目': '', '比較': '以上', '値': '' }); else rows.splice(Number(b.dataset.r), 1);
@@ -671,7 +715,7 @@ ${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
         '状態': '', '人の判定': old['人の判定'] || '', 'AIの判定': v['AIの判定'], 'メモ': v['メモ'] };
       t['状態'] = v['取消'] ? '取消' : cstate(t);
       if (idx >= 0) data['取引'][idx] = t; else data['取引'].push(t);
-      if (await save('取引', `取引 ${t.id} ${t['銘柄名']}：${t['状態']}`)) { edit = null; if (idx >= 0 && history.length > 1) history.back(); else location.hash = '#trades'; } else render(); return;
+      if (await save('取引', `取引 ${t.id} ${t['銘柄名']}：${t['状態']}`)) { edit = null; if (idx < 0) location.hash = '#trade/' + (data['取引'].length - 1); } render(); return;
     }
     if (act === 'del-trade') { const f = document.getElementById('f-trade'), idx = Number(f.dataset.i); if (!confirm('この取引を消す')) return; const t = data['取引'].splice(idx, 1)[0]; if (await save('取引', `取引 ${t.id} を削除`)) location.hash = '#trades'; else render(); return; }
     if (act === 'save-cand') {
@@ -680,7 +724,11 @@ ${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
         '終値': numOrNull(v['終値']), '戦略': (idx >= 0 && data['候補'][idx]['戦略']) || null, '絞り込み': v['絞り込み'], '判定': [0, 1, 2, 3].map((k) => v['j' + k] || null), '根拠': [0, 1, 2, 3].map((k) => (v['g' + k] || '').trim()), '確認': v['確認'] ? ((idx >= 0 && data['候補'][idx]['確認']) || todayISO()) : null, '型が出た日': v['型が出た日'] || null, 'メモ': v['メモ'] };
       if (!c['絞り込み']) c['絞り込み'] = screen(c);
       if (idx >= 0) data['候補'][idx] = c; else data['候補'].push(c);
-      if (await save('候補', `候補 ${c['銘柄名']}：${candState(c)}`)) { if (idx >= 0 && history.length > 1) history.back(); else location.hash = '#trades'; } else render(); return;
+      if (await save('候補', `候補 ${c['銘柄名']}：${candState(c)}`)) { edit = null; if (idx < 0) location.hash = '#cand/' + (data['候補'].length - 1); } render(); return;
+    }
+    if (act === 'confirm-cand') {
+      const c = data['候補'][i]; c['確認'] = todayISO();
+      if (await save('候補', `候補 ${c['銘柄名']}：確認（${candState(c)}）`)) edit = null; render(); return;
     }
     if (act === 'del-cand') { const f = document.getElementById('f-cand'), idx = Number(f.dataset.i); if (!confirm('この候補銘柄を消す')) return; const c = data['候補'].splice(idx, 1)[0]; if (await save('候補', `候補 ${c['銘柄名']} を削除`)) location.hash = '#trades'; else render(); return; }
     if (act === 'save-hist') { const v = fd(document.getElementById('f-hist')); data['改定履歴'].push({ '日付': v['日付'], '問い': v['問い'], '戦略': v['戦略'], '変更': v['変更'], '変更前': v['変更前'], '変更後': v['変更後'], '理由': v['理由'], '件数': Number(v['件数'] || 0) }); if (await save('改定履歴', '改定履歴：' + v['戦略'])) edit = null; render(); return; }
