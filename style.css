@@ -111,3 +111,6 @@ textarea{min-height:4.5em;resize:vertical} input:focus,select:focus,textarea:foc
 .calc{background:var(--accent-soft);border-radius:8px;padding:10px 12px;font-size:14px} .calc.ng{background:var(--ng-bg)}
 .changes .row{min-height:44px;padding:8px 0}
 @media (min-width:600px){ .form.cols{grid-template-columns:repeat(3,1fr)} .gates{grid-template-columns:repeat(2,1fr)} }
+
+.picks{display:flex;flex-wrap:wrap;gap:6px 14px;padding:4px 0}
+.picks .chk{margin:0;font-size:.95em}

@@ -118,13 +118,17 @@
   const CAT = () => data['スクリーナー項目'] || [];
   const catItem = (k) => CAT().find((x) => x.key === k);
   const fmtNum = (v) => (Number.isInteger(Number(v)) ? String(Number(v)) : String(v));
-  const condText = (c) => `${c['項目']}が${fmtNum(c['値'])}${(catItem(c['項目']) || {})['単位'] || ''}${c['比較']}`;
+  const isPick = (k) => ((catItem(k) || {})['種類'] === '選択');
+  const condText = (c) => { if (isPick(c['項目'])) { const w = Array.isArray(c['値']) ? c['値'] : [c['値']]; return `${c['項目']}が${w.join('・')}${w.length > 1 ? 'のいずれか' : ''}`; } return `${c['項目']}が${fmtNum(c['値'])}${(catItem(c['項目']) || {})['単位'] || ''}${c['比較']}`; };
   const genCondLines = (st) => (st['スクリーナー条件'] || []).map(condText).concat([`通った銘柄は平均売買代金の大きい順に${(st['数値欄'] || {})['候補上限_件'] || 10}件まで候補に入れる。買ってよいかは問い2、今買うかは問い3で決める`]);
-  const readCond = (f) => { const v = fd(f), out = []; for (let r = 0; v['ck' + r] !== undefined; r++) { if (v['ck' + r] && v['cv' + r] !== '') out.push({ '項目': v['ck' + r], '比較': v['co' + r], '値': Number(v['cv' + r]) }); } return out; };
+  // 条件の行を読む。選択式の項目はチェックの付いた値の配列、数字の項目は文字のまま（保存時に数にする）
+  const readRows = (f) => { const out = []; for (let r = 0; f.querySelector(`[name="ck${r}"]`); r++) { const k = f.querySelector(`[name="ck${r}"]`).value, co = f.querySelector(`[name="co${r}"]`); out.push({ '項目': k, '比較': isPick(k) ? 'いずれか' : (co ? co.value : '以上'), '値': isPick(k) ? Array.from(f.querySelectorAll(`input[name="cv${r}"]:checked`)).map((x) => x.value) : (f.querySelector(`input[name="cv${r}"]`) || {}).value || '' }); } return out; };
+  const readCond = (f) => readRows(f).filter((c) => c['項目'] && (Array.isArray(c['値']) ? c['値'].length : c['値'] !== '')).map((c) => (Array.isArray(c['値']) ? c : Object.assign({}, c, { '値': Number(c['値']) })));
   function condBuilder(conds) {
     const rows = conds.length ? conds : [{ '項目': '', '比較': '以上', '値': '' }];
     const opts = (sel) => `<option value="">—</option>` + CAT().map((x) => `<option value="${E(x.key)}" ${x.key === sel ? 'selected' : ''}>${E(x.key)}${x['単位'] ? `（${E(x['単位'])}）` : ''}</option>`).join('');
-    return `<h4>スクリーナーの条件</h4><p class="note">項目を選び、以上か以下と数字を入れる。項目の一覧に無い条件は書けない</p>${rows.map((c, r) => `<div class="form cols cond"><label class="f"><span>項目</span><select name="ck${r}">${opts(c['項目'])}</select></label><label class="f"><span>以上／以下</span><select name="co${r}"><option ${c['比較'] === '以上' ? 'selected' : ''}>以上</option><option ${c['比較'] === '以下' ? 'selected' : ''}>以下</option></select></label><label class="f"><span>数字${c['項目'] && catItem(c['項目']) && catItem(c['項目'])['単位'] ? `（${E(catItem(c['項目'])['単位'])}）` : ''}</span><input name="cv${r}" type="number" step="any" inputmode="decimal" value="${E(c['値'])}"></label><div class="btns"><button type="button" class="b quiet danger" data-act="del-cond" data-r="${r}">この条件を消す</button></div></div>`).join('')}<div class="btns"><button type="button" class="b" data-act="add-cond">条件を足す</button></div>`;
+    const pickBox = (c, r) => { const w = Array.isArray(c['値']) ? c['値'] : (c['値'] ? [c['値']] : []); return `<div class="f span"><span>当てはまるもの（複数可）</span><div class="picks">${(catItem(c['項目'])['選択肢'] || []).map((o) => `<label class="chk"><input type="checkbox" name="cv${r}" value="${E(o)}" ${w.includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div></div>`; };
+    return `<h4>スクリーナーの条件</h4><p class="note">項目を選び、以上か以下と数字を入れる（市場区分と業種は当てはまるものにチェック）。項目の一覧に無い条件は書けない</p>${rows.map((c, r) => `<div class="form cols cond"><label class="f"><span>項目</span><select name="ck${r}">${opts(c['項目'])}</select></label>${isPick(c['項目']) ? pickBox(c, r) : `<label class="f"><span>以上／以下</span><select name="co${r}"><option ${c['比較'] === '以上' ? 'selected' : ''}>以上</option><option ${c['比較'] === '以下' ? 'selected' : ''}>以下</option></select></label><label class="f"><span>数字${c['項目'] && catItem(c['項目']) && catItem(c['項目'])['単位'] ? `（${E(catItem(c['項目'])['単位'])}）` : ''}</span><input name="cv${r}" type="number" step="any" inputmode="decimal" value="${E(Array.isArray(c['値']) ? '' : c['値'])}"></label>`}<div class="btns"><button type="button" class="b quiet danger" data-act="del-cond" data-r="${r}">この条件を消す</button></div></div>`).join('')}<div class="btns"><button type="button" class="b" data-act="add-cond">条件を足す</button></div>`;
   }
   function candState(c) {
     if (c['絞り込み'] && c['絞り込み'] !== '可') return '見送り';
@@ -479,6 +483,7 @@ ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改�
   }
   window.addEventListener('hashchange', () => { edit = null; render(); if (!/^#(rule|docs)\/.+\/.+/.test(location.hash)) window.scrollTo(0, 0); });
   app.addEventListener('change', (e) => {
+    if (/^ck\d+$/.test(e.target.name || '')) { const f = document.getElementById('f-strategy'); const rows = readRows(f); const r = Number(e.target.name.slice(2)); rows[r]['値'] = isPick(rows[r]['項目']) ? [] : ''; rows[r]['比較'] = isPick(rows[r]['項目']) ? 'いずれか' : '以上'; edit.cond = rows; edit.draft = fd(f); render(); return; }
     if (e.target.classList.contains('qsel')) location.hash = '#rule/' + e.target.value;
     if (e.target.classList.contains('dsel')) location.hash = e.target.value ? '#docs/' + e.target.value : '#docs';
   });
@@ -494,10 +499,9 @@ ${numf ? `<h4>数値</h4><div class="form cols">${numf}</div>` : ''}${fld('改�
     if (act === 'edit-premise') { edit = { type: 'premise' }; render(); return; }
     if (act === 'edit-strategy') { edit = { type: 'strategy', q: Number(b.dataset.q), idx: i }; render(); return; }
     if (act === 'add-cond' || act === 'del-cond') {
-      const f = document.getElementById('f-strategy'), v = fd(f), rows = [];
-      for (let r = 0; v['ck' + r] !== undefined; r++) rows.push({ '項目': v['ck' + r], '比較': v['co' + r], '値': v['cv' + r] });
+      const f = document.getElementById('f-strategy'), rows = readRows(f);
       if (act === 'add-cond') rows.push({ '項目': '', '比較': '以上', '値': '' }); else rows.splice(Number(b.dataset.r), 1);
-      edit.cond = rows; edit.draft = v; render(); return;
+      edit.cond = rows; edit.draft = fd(f); render(); return;
     }
     if (act === 'edit-hist') { edit = { type: 'hist' }; render(); return; }
     if (act === 'clear-cfg') { cfg.token = ''; localStorage.setItem(KEY, JSON.stringify(cfg)); loaded = false; location.hash = '#settings'; render(); return; }
