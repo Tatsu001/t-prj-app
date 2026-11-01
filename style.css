@@ -40,12 +40,13 @@ nav.tabs a.on{color:var(--accent);font-weight:600;box-shadow:inset 0 2px 0 var(-
 .msg{padding:10px 14px;border-radius:8px;background:var(--ng-bg);color:var(--ng);font-size:14px;margin-bottom:10px}
 /* 場面 */
 .seg{display:flex;gap:6px;overflow-x:auto;margin:-8px -16px 0;padding:0 16px 2px;scrollbar-width:none} .seg::-webkit-scrollbar{display:none}
-.seg a{flex:none;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:14px;min-height:36px}
+.seg a{flex:none;display:inline-flex;align-items:center;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:14px;min-height:44px}
+.seg.wrap{flex-wrap:wrap;overflow:visible;margin:0;padding:0} .seg.wrap a{min-height:40px;padding:5px 12px;font-size:13px}
 .seg a.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 /* 可否 */
 .verdict{border-radius:12px;padding:14px 16px;background:var(--ok-bg)} .verdict.ng{background:var(--ng-bg)}
 .v-main{font-size:24px;font-weight:700;color:var(--ok)} .ng .v-main{color:var(--ng)}
-.v-why{font-size:14px;color:var(--ng);margin-top:2px}
+.v-why{font-size:13px;color:var(--muted);margin-top:4px}
 .gates{display:grid;grid-template-columns:1fr;gap:4px 12px;margin:10px 0 0;font-size:14px}
 .nw{white-space:nowrap}
 .gates>div{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(0,0,0,.08);padding-top:4px} .gates dt{white-space:nowrap}
@@ -73,7 +74,7 @@ nav.tabs a.on{color:var(--accent);font-weight:600;box-shadow:inset 0 2px 0 var(-
 .checks{margin:8px 0 0;padding-left:18px;font-size:14px} .ai{font-size:13px;color:var(--muted);margin-top:6px}
 .ask{margin:0;padding-left:1.4em;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px 10px 2em} .ask li{padding:4px 0}
 .facts{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
-.facts>div{padding:8px 12px;border-bottom:1px solid var(--line-soft)} .facts dt{font-size:12px;color:var(--muted)} .facts dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.facts>div{padding:8px 12px;border-bottom:1px solid var(--line-soft)} .facts>div.wide{grid-column:1/-1} .facts dt{font-size:12px;color:var(--muted)} .facts dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums} .facts>div.wide dd{font-weight:400;font-size:14px}
 /* ルール */
 .adopt{background:var(--ok-bg);border-radius:8px;padding:8px 12px;color:var(--ok);font-weight:600}
 .def dt{font-size:12px;color:var(--muted)} .def dd{margin:0 0 8px;font-size:14px}
@@ -84,7 +85,7 @@ nav.tabs a.on{color:var(--accent);font-weight:600;box-shadow:inset 0 2px 0 var(-
 .strat .rev{font-size:12px;color:var(--muted);margin-top:8px}
 .strat-fold{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 14px;margin:0 0 10px} .strat-fold>summary{padding:12px 0} .strat-fold .strat{border:0;padding:0 0 12px;margin:0}
 .principle{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:10px 0;border-top:1px solid var(--line-soft)} .principle:first-of-type{border-top:0}
-.principle .n{color:var(--muted);font-variant-numeric:tabular-nums} .principle b{display:block} .principle .src{color:var(--muted);font-size:13px}
+.principle .n{color:var(--muted);font-variant-numeric:tabular-nums} .principle>div{font-size:14px;color:var(--muted)} .principle b{display:block;font-size:16px;color:var(--fg)} .principle .src{color:var(--muted);font-size:13px}
 .qsel,.dsel{font:inherit;font-size:20px;font-weight:700;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:100%;max-width:100%}
 /* 文書 */
 .doc{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:15px;line-height:1.75;overflow-wrap:anywhere}
@@ -98,19 +99,19 @@ nav.tabs a.on{color:var(--accent);font-weight:600;box-shadow:inset 0 2px 0 var(-
 form{display:grid;gap:10px}
 .form{display:grid;gap:10px} .form.cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} .span{grid-column:1/-1}
 .grp{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 14px}
-.grp>summary{cursor:pointer;font-weight:600;padding:12px 0;list-style:none} .grp>summary::-webkit-details-marker{display:none} .grp>summary::after{content:"＋";float:right;color:var(--muted)} .grp[open]>summary::after{content:"－"}
+.grp>summary{cursor:pointer;font-weight:600;padding:12px 0;list-style:none;display:grid;grid-template-columns:1fr auto;align-items:start;column-gap:8px} .grp>summary::-webkit-details-marker{display:none} .grp>summary::after{content:"＋";color:var(--muted);grid-column:2;grid-row:1} .grp[open]>summary::after{content:"－"} .grp>summary .sum{grid-column:1} .grp>summary>.t{grid-column:1;justify-self:start} .grp>summary>.t .pill{margin-left:6px}
 .grp .form{padding-bottom:14px}
 .f{display:grid;gap:3px;min-width:0} .f>span{font-size:12px;color:var(--muted)}
 input,select,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;max-width:100%;min-width:0;min-height:44px;box-sizing:border-box;margin:0}
 input:not([type=checkbox]):not([type=radio]){display:block;height:44px;-webkit-appearance:none;appearance:none}
 /* iOS の日付入力は固有の幅と中央寄せを持つので、他の欄と同じ箱に収める */
 input[type=date]{text-align:left;line-height:normal} input::-webkit-date-and-time-value{text-align:left;min-height:1.4em} input[type=date]::-webkit-calendar-picker-indicator{margin-left:auto;padding:0}
-textarea{min-height:4.5em;resize:vertical} input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+textarea{min-height:4.5em;resize:vertical;field-sizing:content} input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
 .chk{display:flex;align-items:center;gap:8px;min-height:44px} .chk input{width:20px;height:20px;min-height:0;accent-color:var(--accent)}
 .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
 .b,button.b{display:inline-block;font:inherit;font-size:15px;padding:10px 16px;min-height:44px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;line-height:1.4}
 .b.primary{background:var(--accent);color:#fff;border-color:transparent} .b.quiet{color:var(--muted)} .b.danger{color:var(--ng);margin-left:auto} .b:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px} .bar h2{margin:0} .bar .b{padding:6px 12px;min-height:36px;font-size:14px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px} .bar h2{margin:0} .bar .b{padding:6px 14px;min-height:44px;font-size:14px}
 .calc{background:var(--accent-soft);border-radius:8px;padding:10px 12px;font-size:14px} .calc.ng{background:var(--ng-bg)}
 .changes .row{min-height:44px;padding:8px 0}
 @media (min-width:600px){ .form.cols{grid-template-columns:repeat(3,minmax(0,1fr))} .gates{grid-template-columns:repeat(2,1fr)} }
@@ -144,15 +145,19 @@ details[open]>summary .sum{display:none} .grp>summary .sum{display:block;font-si
 .foot#last-update{margin-top:-6px;padding-top:0}
 .grp>summary small{font-weight:400;font-size:12px;color:var(--muted);margin-left:8px}
 .scr{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px} .scr h4{margin:0 0 4px} .scr h4 small{font-weight:400;margin-left:8px} .scr p{margin:0 0 8px;font-size:15px} .scr .facts{grid-template-columns:1fr 1fr}
-.c4r{padding:8px 0;border-top:1px solid var(--line-soft)} .c4r:first-child{border-top:0;padding-top:0} .c4h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--muted)} .c4r p{margin:4px 0 0;font-size:15px}
+.c4r{padding:8px 0;border-top:1px solid var(--line-soft)} .c4r:first-child{border-top:0;padding-top:0} .c4h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:15px;color:var(--fg)} .c4h>span:first-child{font-weight:600} .c4r p{margin:4px 0 0;font-size:14px;color:var(--muted)}
 .okline{color:var(--ok);font-weight:600;font-size:15px;margin:8px 0 0} .scr .warn{color:var(--ng);font-size:14px;margin:6px 0 0} .scr .memo{color:var(--muted)} .scr .empty{margin:0;font-size:14px}
 /* 判定の行（候補・建玉・関門で同じ形）と、ルールの行の表 */
-.pill.who{font-size:11px;padding:0 6px;margin-left:4px;vertical-align:0}
+.pill.who{font-size:12px;padding:0 7px;margin-left:4px;vertical-align:0}
 .c4h .pill.who{margin-left:auto}
 .c4r p.muted{color:var(--muted);font-size:14px}
 .jrows{display:grid;gap:4px;margin-top:4px} .jrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:14px;border-top:1px solid var(--line-soft);padding:6px 0} .jrow p{flex-basis:100%;color:var(--muted);font-size:13px;margin:0}
-.btns.inline{display:inline-flex;margin:4px 0 0 8px;gap:6px} .b.small{padding:4px 12px;min-height:36px;font-size:14px}
-.rt{border-collapse:collapse;width:100%;font-size:14px;margin-top:4px} .rt th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:4px 6px 4px 0;border-bottom:1px solid var(--line)} .rt td{vertical-align:top;padding:6px 6px 6px 0;border-bottom:1px solid var(--line-soft)} .rt td:first-child{white-space:nowrap;font-weight:600} .rt .see{display:block;color:var(--muted);font-size:12px}
+.btns.inline{display:inline-flex;margin:4px 0 0 8px;gap:6px} .b.small{padding:6px 14px;min-height:44px;font-size:15px}
 .prop{margin:6px 0 2px;padding:8px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:14px}
-.rowed{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px} .rowed .fold>summary{font-size:13px;padding:4px 0}
+.rowed{margin-bottom:8px} .rowed>summary .sum{display:block;font-size:13px;color:var(--muted);font-weight:400;margin-top:2px} .rowed .fold>summary{font-size:13px;padding:4px 0}
+/* ルールの行：名前と札 → 条件 → 行動 */
+.rrows{display:grid;gap:0;margin-top:4px} .rrow{padding:8px 0;border-top:1px solid var(--line-soft)} .rrow:first-child{border-top:0;padding-top:2px} .rh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:15px} .rh .rn{font-weight:600} .rh .pill.who{margin-left:auto} .rrow p{margin:3px 0 0;font-size:14px} .rrow .rc{color:var(--fg)} .rrow .rc .see{display:block;color:var(--muted);font-size:12px} .rrow .ra{color:var(--muted)}
+/* 候補一覧の○×未（右端の固定幅） */
+.row.cand .marks{grid-column:2;grid-row:1/3;display:inline-flex;gap:1px;font-variant-numeric:tabular-nums;font-size:15px;font-weight:600} .marks i{font-style:normal;width:1.25em;text-align:center} .marks i.ok{color:var(--ok)} .marks i.ng{color:var(--ng)} .marks i.na{color:var(--muted);font-weight:400}
+.sh3{font-size:13px;color:var(--muted);font-weight:600;margin:14px 0 6px}
 .f>span small{margin-left:6px;font-weight:400}
