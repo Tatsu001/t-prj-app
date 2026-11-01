@@ -146,3 +146,13 @@ details[open]>summary .sum{display:none} .grp>summary .sum{display:block;font-si
 .scr{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px} .scr h4{margin:0 0 4px} .scr h4 small{font-weight:400;margin-left:8px} .scr p{margin:0 0 8px;font-size:15px} .scr .facts{grid-template-columns:1fr 1fr}
 .c4r{padding:8px 0;border-top:1px solid var(--line-soft)} .c4r:first-child{border-top:0;padding-top:0} .c4h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--muted)} .c4r p{margin:4px 0 0;font-size:15px}
 .okline{color:var(--ok);font-weight:600;font-size:15px;margin:8px 0 0} .scr .warn{color:var(--ng);font-size:14px;margin:6px 0 0} .scr .memo{color:var(--muted)} .scr .empty{margin:0;font-size:14px}
+/* 判定の行（候補・建玉・関門で同じ形）と、ルールの行の表 */
+.pill.who{font-size:11px;padding:0 6px;margin-left:4px;vertical-align:0}
+.c4h .pill.who{margin-left:auto}
+.c4r p.muted{color:var(--muted);font-size:14px}
+.jrows{display:grid;gap:4px;margin-top:4px} .jrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:14px;border-top:1px solid var(--line-soft);padding:6px 0} .jrow p{flex-basis:100%;color:var(--muted);font-size:13px;margin:0}
+.btns.inline{display:inline-flex;margin:4px 0 0 8px;gap:6px} .b.small{padding:4px 12px;min-height:36px;font-size:14px}
+.rt{border-collapse:collapse;width:100%;font-size:14px;margin-top:4px} .rt th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:4px 6px 4px 0;border-bottom:1px solid var(--line)} .rt td{vertical-align:top;padding:6px 6px 6px 0;border-bottom:1px solid var(--line-soft)} .rt td:first-child{white-space:nowrap;font-weight:600} .rt .see{display:block;color:var(--muted);font-size:12px}
+.prop{margin:6px 0 2px;padding:8px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:14px}
+.rowed{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px} .rowed .fold>summary{font-size:13px;padding:4px 0}
+.f>span small{margin-left:6px;font-weight:400}

@@ -1,213 +1,259 @@
-/* 戦略に依存しない計算。画面（ブラウザ）と AI（node app/calc.js status）が同じものを使う。
-   node app/calc.js status [YYYY-MM-DD]
-   node app/calc.js size 発注価格 損切り価格 区分 [YYYY-MM-DD]
-   node app/calc.js orders [YYYY-MM-DD]
+/* 戦略を知らない算数と、記録から出す口座の数字。画面（ブラウザ）と AI（node app/calc.js …）が同じものを使う。
+   仕組みが知らないこと：問いの番号と役割、戦略名、行の数と中身、数値欄のキー名、材料の名前。
+   知っていること：属性の値（対象・結果・判定者）、記録の形、算数。
+
+   node app/calc.js materials [--code コード] [--trade id] [YYYY-MM-DD]   口座・銘柄・建玉・暦の材料（内部名で）
+   node app/calc.js size 発注価格 損切り価格 1R額 1単元上限額 1銘柄上限額 [YYYY-MM-DD]   株数の算数
+   node app/calc.js days YYYY-MM-DD N          N営業日後（負なら前）
+   node app/calc.js stages [YYYY-MM-DD]         候補・取引・口座の段階
+   node app/calc.js summary [YYYY-MM-DD]        問い×戦略の材料（評価の層）
 */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.Calc = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const DAY = 86400000;
-  const d = (s) => (s ? new Date(s + 'T00:00:00Z') : null);
+  const d = (s) => (s ? new Date(String(s).slice(0, 10) + 'T00:00:00Z') : null);
   const iso = (x) => x.toISOString().slice(0, 10);
 
+  // ---------- 暦 ----------
   function makeCal(holidays) {
     const H = new Set(holidays || []);
     const isBd = (x) => { const w = x.getUTCDay(); return w !== 0 && w !== 6 && !H.has(iso(x)); };
     const workday = (x, n) => { let y = new Date(x.getTime()); const step = n > 0 ? 1 : -1; while (n !== 0) { y = new Date(y.getTime() + step * DAY); if (isBd(y)) n -= step; } return y; };
     const bdays = (a, b) => { if (b < a) return -bdays(b, a); let n = 0, y = new Date(a.getTime()); while (y < b) { y = new Date(y.getTime() + DAY); if (isBd(y)) n++; } return n; };
-    return { isBd, workday, bdays };
+    // 明日から数えて休場が何日続くか（3以上なら「3連休以上の前日」）
+    const offDaysAhead = (x) => { let n = 0, y = new Date(x.getTime() + DAY); while (!isBd(y)) { n++; y = new Date(y.getTime() + DAY); if (n > 30) break; } return n; };
+    return { isBd, workday, bdays, offDaysAhead };
   }
 
-  /** 採用中の戦略（区分→共通の順）。 */
-  function adopted(questions, num, kubun) {
-    const q = questions.find((x) => x.num === num);
-    if (!q) return null;
-    const list = q['戦略'].filter((s) => s['状態'] === '採用');
+  // ---------- 問いと戦略（属性で探す。番号は使わない） ----------
+  const questionsBy = (questions, pred) => (questions || []).filter(pred);
+  const adoptedFor = (q, kubun) => {
+    const list = (q['戦略'] || []).filter((s) => s['状態'] === '採用');
     return list.find((s) => s['区分'] === kubun) || list.find((s) => s['区分'] === '共通') || list[0] || null;
-  }
-  const nums = (questions, num, kubun) => (adopted(questions, num, kubun) || {})['数値欄'] || {};
-  function byName(questions, num, name) {
-    const q = questions.find((x) => x.num === num);
-    return (q && q['戦略'].find((s) => s.name === name)) || null;
-  }
+  };
+  const byName = (q, name) => (q && (q['戦略'] || []).find((s) => s.name === name)) || null;
+  // 適用範囲：対象の属性（区分・市場区分・業種…）で行を絞る
+  const inScope = (row, attrs) => (row['適用範囲'] || []).every((a) => { const v = (attrs || {})[a['項目']]; const want = Array.isArray(a['値']) ? a['値'] : [a['値']]; return v != null && want.includes(v); });
+  const rowsFor = (strategy, attrs) => (strategy ? (strategy['行'] || []) : []).filter((r) => inScope(r, attrs));
+  const condRows = (strategy, attrs) => rowsFor(strategy, attrs).filter((r) => r['条件']);
 
-  function pl(t) {
-    if (!t['約定価格'] || !t['売り'] || !t['売り'].length) return null;
-    return t['売り'].reduce((a, s) => a + (s['価格'] - t['約定価格']) * s['株数'], 0);
-  }
+  // ---------- 判定の記録 ----------
+  // 同じ（問い・条件）に複数あれば最後が有効。人が直した時もAIの分は残る
+  const latest = (list, qnum, name) => { let hit = null; (list || []).forEach((j) => { if (j && typeof j === 'object' && j['問い'] === qnum && j['条件'] === name) hit = j; }); return hit; };
+  const results = (list, qnum, names) => names.map((n) => { const j = latest(list, qnum, n); return j ? j['結果'] : '未'; });
+  const compose = (gosei, rs) => (gosei === '全部' ? (rs.includes('×') ? '×' : rs.every((r) => r === '○') ? '○' : '未') : (rs.includes('○') ? '○' : rs.every((r) => r === '×') ? '×' : '未'));
+
+  // ---------- 建玉 ----------
+  function pl(t) { if (!t['約定価格'] || !t['売り'] || !t['売り'].length) return null; return t['売り'].reduce((a, s) => a + (s['価格'] - t['約定価格']) * s['株数'], 0); }
   const soldQty = (t) => (t['売り'] || []).reduce((a, s) => a + (s['株数'] || 0), 0);
   const remQty = (t) => (t['約定株数'] || 0) - soldQty(t);
   function state(t) {
-    if (t['状態'] === '取消') return '取消';  // 未約定の取消も効かせる
+    if (t['状態'] === '取消') return '取消';
     if (!t['約定日']) return t['記録日'] ? '注文中' : '';
     if (remQty(t) <= 0) return '決済済み';
     return soldQty(t) > 0 ? '一部利確' : '保有中';
   }
   const closeDate = (t) => (state(t) === '決済済み' ? t['売り'].map((s) => s['日付']).sort().slice(-1)[0] : null);
   const rValue = (t) => { const p = pl(t); return p == null ? null : p / ((t['約定価格'] - t['損切り価格']) * t['約定株数']); };
+  const ruleOf = (t, qnum) => ((t['使うルール'] || {})[String(qnum)] || null);
 
-  function status(data, today) {
-    const { 前提: pre, 問い: qs, 取引: trades } = data;
+  // ---------- 銘柄（候補）の段階 ----------
+  // gate：対象が銘柄で結果が「段階を進める」問い。requiredNames：採用戦略の条件つきの行の名前
+  function candStage(c, gate) {
+    if (c['絞り込み'] && c['絞り込み'] !== '可') return '見送り';
+    const js = (c['判定'] || []).filter((j) => j && typeof j === 'object');
+    if (!gate) return js.some((j) => j['根拠']) ? '確認待ち' : '仮判定中';
+    const rs = results(js, gate.qnum, gate.names);
+    if (rs.includes('×')) return '見送り';
+    if (gate.names.length && rs.every((r) => r === '○') && c['確認']) return c['型が出た日'] ? '型が出た' : 'ウォッチ中';
+    return js.some((j) => j['問い'] === gate.qnum && (j['根拠'] || j['結果'] === '○' || j['結果'] === '×')) ? '確認待ち' : '仮判定中';
+  }
+  // 候補の属性（適用範囲と採用の選択に使う）
+  const candAttrs = (c) => ({ '区分': c['区分'], '市場区分': c['市場区分'] || null, '業種（33業種）': c['業種'] || null });
+  function gateFor(questions, c) {
+    const q = questionsBy(questions, (x) => x['対象'] === '銘柄' && x['結果'] === '段階を進める')[0];
+    if (!q) return null;
+    const s = adoptedFor(q, c['区分']);
+    return { qnum: q.num, strategy: s ? s.name : null, names: condRows(s, candAttrs(c)).map((r) => r['名前']) };
+  }
+
+  // ---------- 口座の段階（口座.json の最新から） ----------
+  const latestAccount = (acct, today) => (acct || []).filter((x) => x['日付'] <= today).sort((a, b) => (a['日付'] < b['日付'] ? -1 : 1)).slice(-1)[0] || null;
+  function accountStage(acct, today) {
+    const a = latestAccount(acct, today);
+    if (!a) return '未記録';
+    if (a['取引停止']) return '停止';
+    if (a['停止解除日'] && a['停止解除日'] > today) return '新規停止';
+    return '通常';
+  }
+
+  // ---------- 材料（記録から出す数字。内部名は data/材料.json の「計算」） ----------
+  function materials(data, today, opts) {
+    opts = opts || {};
+    const pre = data['前提'], trades = data['取引'] || [], acct = data['口座'] || [];
     const cal = makeCal(pre['休日']);
     const T = d(today);
     const closed = trades.filter((t) => state(t) === '決済済み').map((t) => ({ t, pl: pl(t), c: closeDate(t) })).sort((a, b) => (a.c < b.c ? -1 : 1));
-    const cash = pre['初期資金'] + closed.reduce((a, x) => a + x.pl, 0);
-    const peak = Math.max(pre['初期資金'], cash);
+    let cash = pre['初期資金'], peak = pre['初期資金'], maxDd = 0;
+    closed.forEach((x) => { cash += x.pl; peak = Math.max(peak, cash); maxDd = Math.max(maxDd, 1 - cash / peak); });
     const dd = 1 - cash / peak;
-    const q11 = nums(qs, 11), q9 = nums(qs, 9);
-    let stage = '通常';
-    if (cash < pre['停止残高'] || dd >= q11['段階3_pct'] / 100) stage = '停止';
-    else if (dd >= q11['段階2_pct'] / 100) stage = '段階2';
-    else if (dd >= q11['段階1_pct'] / 100) stage = '段階1';
     const held = trades.filter((t) => ['保有中', '一部利確'].includes(state(t)));
     const waiting = trades.filter((t) => state(t) === '注文中');
-    let openRisk = 0;
-    held.forEach((t) => { openRisk += (t['約定価格'] - t['損切り価格']) * remQty(t); });
-    waiting.forEach((t) => { openRisk += (t['発注価格'] - t['損切り価格']) * (t['株数'] || 0); });
+    let openRisk = 0, invested = 0;
+    held.forEach((t) => { openRisk += (t['約定価格'] - t['損切り価格']) * remQty(t); invested += t['約定価格'] * remQty(t); });
+    waiting.forEach((t) => { openRisk += (t['発注価格'] - t['損切り価格']) * (t['株数'] || 0); invested += (t['発注価格'] || 0) * (t['株数'] || 0); });
+    // 連敗：停止解除日（口座の記録）より後の決済だけ数える
+    const lastRelease = acct.map((x) => x['停止解除日']).filter(Boolean).sort().slice(-1)[0] || null;
     let streak = 0;
-    for (let i = closed.length - 1; i >= 0 && closed[i].pl < 0; i--) streak++;
-    const lossToday = closed.some((x) => x.c === today && x.pl < 0);
+    for (let i = closed.length - 1; i >= 0 && closed[i].pl < 0 && !(lastRelease && closed[i].c <= lastRelease); i--) streak++;
     const prevBd = iso(cal.workday(T, -1));
+    const lossToday = closed.some((x) => x.c === today && x.pl < 0);
     const lossPrev = closed.some((x) => x.c === prevBd && x.pl < 0);
-    // 地合い：引け後に人が答えた値（data/地合い.json）。当日か前営業日の分だけ有効。無ければ未確認（止めない）
-    const q10 = nums(qs, 10);
-    const mk = (data['地合い'] || []).filter((x) => x['日付'] <= today).sort((a, b) => (a['日付'] < b['日付'] ? -1 : 1)).slice(-1)[0];
-    const market = { date: mk ? mk['日付'] : null, ok: null, text: '未確認', bad: [] };
-    if (mk && (mk['日付'] === today || mk['日付'] === prevBd)) {
-      if (mk['指数25日線'] === '×') market.bad.push('指数が' + (q10['移動平均_日'] || 25) + '日線の下');
-      if (mk['先物夜間'] === '×') market.bad.push('先物夜間が−' + (q10['先物夜間_pct'] || 2) + '%超');
-      market.ok = market.bad.length === 0;
-      market.text = (market.ok ? '○' : market.bad.join('、')) + '（' + mk['日付'].slice(5).replace('-', '/') + '）';
+    // 改定後の件数：最後の改定（提案と初版を除く）以後の決済
+    const changes = (data['改定履歴'] || []).filter((h) => !['提案', '追加', '削除'].includes(h['変更']) && h['問い'] !== '全部').map((h) => h['日付']).sort();
+    const lastChange = changes.slice(-1)[0] || null;
+    const sinceChange = closed.filter((x) => !lastChange || x.c > lastChange).length;
+    // 連続マイナス年数（今年を含めず、終わった年だけ）
+    const byYear = {}; closed.forEach((x) => { const y = x.c.slice(0, 4); byYear[y] = (byYear[y] || 0) + x.pl; });
+    let losingYears = 0; for (let y = Number(today.slice(0, 4)) - 1; byYear[String(y)] != null && byYear[String(y)] < 0; y--) losingYears++;
+    const events = (pre['イベント暦'] || []).map((e) => (typeof e === 'string' ? e : e['日付']));
+    const nextBd = iso(cal.workday(T, 1));
+    const out = {
+      cash: Math.round(cash), peak: Math.round(peak), ddPct: r1(dd * 100), maxDdPct: r1(maxDd * 100), stop_balance: pre['停止残高'],
+      'cash / stop_balance * 100': r1(cash / pre['停止残高'] * 100),
+      held: held.length, waiting: waiting.length, 'held + waiting': held.length + waiting.length,
+      openRiskPct: r1(openRisk / pre['月初資金'] * 100), cashRatioPct: r1((pre['月初資金'] - invested) / pre['月初資金'] * 100),
+      streak, lossToday: yn(lossToday), lossPrev: yn(lossPrev), closed_since_last_change: sinceChange, losing_years_streak: losingYears,
+      before_long_holiday: yn(cal.offDaysAhead(T) >= 3), before_event: yn(events.includes(nextBd)),
+      shikin: pre['月初資金'], unit: pre['単元'],
+    };
+    if (opts.code) {
+      const live = held.concat(waiting);
+      const ind = opts.industry || ((data['候補'] || []).find((c) => c['コード'] === opts.code) || {})['業種'] || null;
+      out.same_code_held = live.filter((t) => t['コード'] === opts.code).length;
+      out.same_industry_held = ind ? live.filter((t) => t['コード'] !== opts.code && t['業種'] === ind).length : 0;
+      const lastLoss = closed.filter((x) => x.t['コード'] === opts.code && x.pl < 0).map((x) => x.c).sort().slice(-1)[0] || null;
+      out.bdays_since_last_loss = lastLoss ? cal.bdays(d(lastLoss), T) : 99999;
+      // 銘柄の問いで建玉の材料を使う時は、その銘柄の保有中の建玉で解く
+      const t = held.find((x) => x['コード'] === opts.code);
+      if (t) Object.assign(out, tradeMaterials(t, cal, T));
     }
+    if (opts.trade != null) {
+      const t = trades.find((x) => x.id === Number(opts.trade));
+      if (t) Object.assign(out, tradeMaterials(t, cal, T));
+    }
+    return out;
+  }
+  function tradeMaterials(t, cal, T) {
+    return { bdays_held: t['約定日'] ? cal.bdays(d(t['約定日']), T) : null, bdays_since_order: t['記録日'] ? cal.bdays(d(t['記録日']), T) : null,
+      partially_sold: yn(soldQty(t) > 0 && remQty(t) > 0), entry: t['約定価格'] || null, stop: t['損切り価格'] || null, rem: remQty(t) };
+  }
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const yn = (b) => (b ? 'はい' : 'いいえ');
+
+  // ---------- 株数の算数（戦略を知らない。1R額などは呼ぶ側が渡す） ----------
+  function size(o) {
+    const per = o.entry - o.stop, unit = o.unit || 100;
+    const out = { entry: o.entry, stop: o.stop, widthPct: Math.round(per / o.entry * 10000) / 100, oneR: o.oneR };
+    if (!(per > 0)) return Object.assign(out, { qty: 0, reasons: ['損切りが発注価格より上'] });
+    let n = Math.floor(o.oneR / per / unit) * unit;
     const reasons = [];
-    if (market.ok === false) reasons.push('地合い：' + market.bad.join('、'));
-    if (stage === '停止') reasons.push('取引停止（50万円割れ または 最高額から半減）');
-    if (stage === '段階2') reasons.push('新規買い停止（最高額から' + q11['段階2_pct'] + '%減）');
-    if (lossToday) reasons.push('損切り当日');
-    if (streak >= q11['連敗停止']) reasons.push(streak + '連敗');
-    if (held.length + waiting.length >= q9['同時保有上限']) reasons.push('保有銘柄数の上限');
-    let lot = 1;
-    if (stage === '段階1') lot = q11['段階1ロット_pct'] / 100;
-    else if (lossPrev) lot = q11['損切り直後ロット_pct'] / 100;
+    if (n === 0 && o.oneRCap != null && per * unit <= o.oneRCap) n = unit;
+    if (o.perStockCap != null) { const cap = Math.floor(o.perStockCap / o.entry / unit) * unit; if (n > cap) { n = cap; reasons.push('1銘柄の上限で株数を減らした'); } }
+    if (n === 0) reasons.push('1単元でも1Rの上限を超える');
+    return Object.assign(out, { qty: n, amount: n * o.entry, risk: Math.round(n * per), reasons });
+  }
+
+  // ---------- 段階の一覧 ----------
+  function stages(data, today) {
+    const qs = data['問い'];
     return {
-      today, cash: Math.round(cash), peak: Math.round(peak), ddPct: Math.round(dd * 1000) / 10, stage,
-      held: held.length, heldMax: q9['同時保有上限'], waiting: waiting.length,
-      openRiskPct: Math.round(openRisk / pre['月初資金'] * 1000) / 10, openRiskMax: q9['合計リスク上限_pct'],
-      streak, lossToday, lossPrev, lot, market, ok: reasons.length === 0, reasons,
+      候補: (data['候補'] || []).map((c) => ({ コード: c['コード'], 銘柄名: c['銘柄名'], 段階: candStage(c, gateFor(qs, c)) })),
+      取引: (data['取引'] || []).map((t) => ({ id: t.id, 銘柄名: t['銘柄名'], 段階: state(t) })),
+      口座: accountStage(data['口座'], today),
     };
   }
 
-  function size(data, entry, stop, kubun, today) {
-    const { 前提: pre, 問い: qs } = data;
-    const st = status(data, today);
-    const q5 = nums(qs, 5), unit = pre['単元'];
-    const per = entry - stop;
-    const out = { entry, stop, widthPct: Math.round(per / entry * 10000) / 100, lot: st.lot };
-    if (per <= 0) return Object.assign(out, { qty: 0, ok: false, reasons: ['損切りが発注価格より上'] });
-    const oneR = pre['月初資金'] * q5['1R_pct'] / 100 * st.lot;
-    let n = Math.floor(oneR / per / unit) * unit;
-    if (n === 0 && per * unit <= pre['月初資金'] * q5['1R上限_pct'] / 100) n = unit;
-    const cap = Math.floor(pre['月初資金'] * q5['1銘柄上限_pct'] / 100 / entry / unit) * unit;
-    n = Math.min(n, cap);
-    const total = st.openRiskPct + n * per / pre['月初資金'] * 100;
-    const reasons = [...st.reasons];
-    if (n === 0) reasons.push('1単元でも1Rの上限を超える');
-    if (total > nums(qs, 9)['合計リスク上限_pct']) reasons.push('全部損切りした時の損失が上限を超える');
-    const t3 = nums(qs, 3, kubun);
-    if (t3['損切り幅下限_pct'] != null && out.widthPct < t3['損切り幅下限_pct']) reasons.push('損切り幅が狭い');
-    if (t3['損切り幅上限_pct'] != null && out.widthPct > t3['損切り幅上限_pct']) reasons.push('損切り幅が広い');
-    const q7 = nums(qs, 7, kubun);
-    const cal = makeCal(pre['休日']);
-    return Object.assign(out, { oneR: Math.round(oneR), qty: n, amount: n * entry, risk: Math.round(n * per), totalRiskPct: Math.round(total * 10) / 10,
-      ok: reasons.length === 0, reasons, deadline: iso(cal.workday(d(today), q7['最大保有_営業日'])) });
-  }
-
-  function deadline(data, t) {
-    const { 前提: pre, 問い: qs } = data;
-    const cal = makeCal(pre['休日']);
-    const q7 = (byName(qs, 7, t['期限']) || adopted(qs, 7, t['区分']) || {})['数値欄'] || {};
-    let limit = cal.workday(d(t['約定日']), q7['最大保有_営業日'] || 20);
-    if (t['イベント日']) {
-      const before = t['イベント種別'] === '解除' ? q7['解除前_営業日'] : q7['決算前_営業日'];
-      if (before != null) { const ev = cal.workday(d(t['イベント日']), -before); if (ev < limit) limit = ev; }
-    }
-    return limit;
-  }
-
-  /** 明日の発注と、保有中の次の行動。 */
-  function orders(data, today) {
-    const { 前提: pre, 問い: qs, 取引: trades } = data;
-    const cal = makeCal(pre['休日']);
-    const T = d(today), unit = pre['単元'];
-    const out = { new: [], hold: [] };
-    trades.forEach((t) => {
-      const s = state(t);
-      if (s === '注文中') {
-        const o = (byName(qs, 4, t['注文']) || adopted(qs, 4) || {})['数値欄'] || {};
-        const age = cal.bdays(d(t['記録日']), T);
-        out.new.push({ t, buy: { kind: '逆指値買い', price: t['発注価格'], qty: t['株数'] }, stop: { kind: '逆指値売り（損切り）', price: t['損切り価格'], qty: t['株数'] },
-          note: t['型'] + '。' + (o['取消_営業日'] ? o['取消_営業日'] + '営業日で約定しなければ取消' : ''), expired: o['取消_営業日'] ? age >= o['取消_営業日'] : false, cancelDays: o['取消_営業日'] || null });
-      } else if (s === '保有中' || s === '一部利確') {
-        const limit = deadline(data, t);
-        const left = cal.bdays(T, limit);
-        const tp = (byName(qs, 6, t['利確']) || adopted(qs, 6) || {})['数値欄'] || {};
-        const lvl = tp['利確水準_R'] || 1, pct = tp['利確割合_pct'] || 50, trail = tp['トレーリング'] || '';
-        const n = t['約定株数'], rem = remQty(t);
-        const tpPrice = Math.round(t['約定価格'] + (t['約定価格'] - t['損切り価格']) * lvl);
-        const part = pct >= 100 ? n : (n > unit ? Math.floor(n * pct / 100 / unit) * unit : 0);
-        // stopPrice：いま置いておく損切りの逆指値（一部利確後は建値）。checks：AIが毎日見る売る条件。noTp：1単元で分割利確が無い
-        const h = { t, state: s, rem, limit: iso(limit), left, orders: [], checks: [], stopPrice: s === '一部利確' ? t['約定価格'] : t['損切り価格'], noTp: false };
-        if (left <= 0) h.orders.push({ kind: '成行売り（寄付）', qty: rem, why: '期限' });
-        else if (s === '保有中') {
-          if (part) h.orders.push({ kind: '指値売り', price: tpPrice, qty: part, why: '利確（+' + lvl + 'R）。置いてあれば何もしない' });
-          else h.noTp = true;
-          if (trail && trail !== 'なし') h.checks.push(trail);
-        } else {
-          h.orders.push({ kind: '逆指値売りを変更', price: t['約定価格'], qty: rem, why: '半分利確後は建値へ。済んでいれば何もしない' });
-          if (trail && trail !== 'なし') h.checks.push(trail);
+  // ---------- 集計（評価の層。戦略の材料。内部名は data/材料.json の「計算」） ----------
+  function summary(data, today) {
+    const qs = data['問い'], trades = data['取引'] || [], cands = data['候補'] || [], acct = data['口座'] || [], hist = data['改定履歴'] || [];
+    const cal = makeCal(data['前提']['休日']);
+    const ym = today.slice(0, 7);
+    const closed = trades.filter((t) => state(t) === '決済済み');
+    const month = (x) => (x || '').startsWith(ym);
+    const avg = (a) => (a.length ? Math.round(a.reduce((p, q) => p + q, 0) / a.length * 100) / 100 : null);
+    const pct = (num, den) => (den ? Math.round(num / den * 100) : null);
+    const agreement = (records, qnum) => {  // AIの判定を人が直さなかった割合（行ごとにも）
+      let n = 0, same = 0; const rows = {};
+      records.forEach((rec) => { const js = (rec['判定'] || []).filter((j) => j['問い'] === qnum); const seen = {};
+        js.forEach((j) => { const k = j['条件']; if (j['判定者'] === 'AI') seen[k] = j['結果']; else if (j['判定者'] === '人' && seen[k] != null) { n++; rows[k] = rows[k] || { n: 0, same: 0 }; rows[k].n++; if (seen[k] === j['結果']) { same++; rows[k].same++; } } }); });
+      return { pct: pct(same, n), rows: Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, pct(v.same, v.n)])) };
+    };
+    const after = (recs) => avg(recs.map((r) => (r['その後'] || {})['変化率_pct']).filter((v) => v != null));
+    const out = {};
+    qs.forEach((q) => {
+      out[q.num] = (q['戦略'] || []).map((s) => {
+        const m = { name: s.name, state: s['状態'] };
+        let ts = [], cs = [];
+        if (q['対象'] === '建玉' || q['結果'] === '注文を作る' || q['結果'] === '可否') ts = closed.filter((t) => ruleOf(t, q.num) === s.name);
+        if (q['結果'] === '候補に入れる') cs = cands.filter((c) => c['戦略'] === s.name);
+        if (q['結果'] === '段階を進める') cs = cands.filter((c) => c['判定の戦略'] === s.name);
+        if (['口座', '戦略', '人'].includes(q['対象'])) ts = s['状態'] === '採用' ? closed : [];
+        const rs = ts.map(rValue);
+        m.n = ts.length; m.winPct = pct(ts.filter((t) => pl(t) >= 0).length, ts.length); m.rAvg = avg(rs); m.rSum = rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) * 100) / 100 : null;
+        const comp = ts.map((t) => ((t['遵守'] || {})[String(q.num)])).filter((v) => v === '○' || v === '×');
+        m.compliancePct = pct(comp.filter((v) => v === '○').length, comp.length);
+        const ag = agreement(q['対象'] === '銘柄' ? cs.length ? cs : cands : ts.length ? ts : trades, q.num); m.agreementPct = ag.pct; m.agreementRows = ag.rows;
+        m.candidates_month = cs.filter((c) => month(c['日付'])).length;
+        m.setups_month = cs.filter((c) => month(c['型が出た日'])).length;
+        m.after_avg_change = after(cs.length ? cs : ts);
+        m.cancelled = trades.filter((t) => state(t) === '取消' && ruleOf(t, q.num) === s.name).length;
+        m.violations = ts.filter((t) => /ルール違反|ミス/.test(t['メモ'] || '')).length;
+        m.sold_by_deadline = ts.filter((t) => t['売った理由'] === '期限').length;
+        const rest = ts.filter((t) => (t['売り'] || []).length >= 2).map((t) => { const last = t['売り'][t['売り'].length - 1]; return (last['価格'] - t['約定価格']) / (t['約定価格'] - t['損切り価格']); });
+        m.rest_over_1r_pct = pct(rest.filter((v) => v > 1).length, rest.length);
+        if (s['状態'] === '採用' && ['口座', '戦略', '人'].includes(q['対象'])) {
+          const mine = acct.filter((a) => (a['判定'] || []).some((j) => j['問い'] === q.num));
+          m.blocked = acct.reduce((n, a) => n + ((a['見送り'] || []).filter((x) => x['問い'] === q.num).length), 0);
+          m.blocked_days = mine.filter((a) => (a['判定'] || []).some((j) => j['問い'] === q.num && j['結果'] === (q['合成'] === 'どれか' ? '○' : '×'))).length;
+          m.skipped_by_limit = m.blocked;
+          m.stage1_count = acct.filter((a, i) => a['ロット'] < 1 && (i === 0 || !(acct[i - 1]['ロット'] < 1))).length;
+          m.revisions = hist.filter((h) => h['変更'] !== '提案').length;
+          m.revision_improved_pct = null;
+          const bds = []; let x = d(ym + '-01'); while (iso(x).startsWith(ym) && x <= d(today)) { if (cal.isBd(x)) bds.push(iso(x)); x = new Date(x.getTime() + DAY); }
+          const have = new Set(acct.map((a) => a['日付']));
+          m.missed_runs = bds.filter((b) => !have.has(b)).length;
+          m.unanswered_days = acct.filter((a) => month(a['日付']) && a['答えなし']).length;
         }
-        h.checks.push('決算・材料の発表');
-        if (h.noTp) h.checks.push('1単元のため分割利確なし');
-        out.hold.push(h);
-      }
+        if (q['結果'] === '可否' || q['結果'] === '新規可否') m.blocked = m.blocked != null ? m.blocked : acct.reduce((n, a) => n + ((a['見送り'] || []).filter((x) => x['問い'] === q.num).length), 0);
+        return m;
+      });
     });
     return out;
   }
 
-  /** 問い×戦略の集計。 */
-  function summary(data) {
-    const { 問い: qs, 取引: trades } = data;
-    const closed = trades.filter((t) => state(t) === '決済済み');
-    const minN = nums(qs, 12)['最小件数'] || 5;
-    const table = (num, key) => (qs.find((q) => q.num === num)['戦略']).map((s) => {
-      const ts = closed.filter((t) => t[key] === s.name);
-      const rs = ts.map(rValue);
-      const wins = ts.filter((t) => pl(t) >= 0).length;
-      return { name: s.name, state: s['状態'], n: ts.length, winPct: ts.length ? Math.round(wins / ts.length * 100) : null,
-        rSum: ts.length ? Math.round(rs.reduce((a, b) => a + b, 0) * 100) / 100 : null, rAvg: ts.length ? Math.round(rs.reduce((a, b) => a + b, 0) / ts.length * 100) / 100 : null,
-        ready: ts.length >= minN, minN };
-    });
-    return { minN, 型: table(3, '型'), 利確: table(6, '利確'), 期限: table(7, '期限'), 注文: table(4, '注文') };
-  }
-
-  const api = { makeCal, adopted, nums, byName, pl, state, closeDate, rValue, remQty, status, size, orders, deadline, summary };
+  const api = { makeCal, questionsBy, adoptedFor, byName, inScope, rowsFor, condRows, latest, results, compose, pl, soldQty, remQty, state, closeDate, rValue, ruleOf,
+    candStage, candAttrs, gateFor, latestAccount, accountStage, materials, size, stages, summary };
 
   if (typeof module === 'object' && module.exports && typeof require === 'function' && require.main === module) {
     const fs = require('fs'), path = require('path');
     const dir = path.join(__dirname, '..', 'data');
-    const load = (n) => JSON.parse(fs.readFileSync(path.join(dir, n + '.json'), 'utf8'));
-    const data = { 前提: load('前提'), 問い: load('問い'), 取引: load('取引'), 候補: load('候補'), 地合い: fs.existsSync(path.join(dir, '地合い.json')) ? load('地合い') : [] };
-    const [cmd, ...a] = process.argv.slice(2);
-    // 日本時間の日付。コンテナの時計はUTCなので、朝9時前は前日になってしまう
+    const load = (n) => (fs.existsSync(path.join(dir, n + '.json')) ? JSON.parse(fs.readFileSync(path.join(dir, n + '.json'), 'utf8')) : []);
+    const data = { 前提: load('前提'), 問い: load('問い'), 取引: load('取引'), 候補: load('候補'), 口座: load('口座'), 改定履歴: load('改定履歴') };
+    const argv = process.argv.slice(2);
+    const opt = (k) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : null; };
+    const cmd = argv[0];
     const jst = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
-    const today = (a.find((x) => /^\d{4}-\d{2}-\d{2}$/.test(x))) || jst;
+    const today = argv.find((x, i) => i > 0 && /^\d{4}-\d{2}-\d{2}$/.test(x) && argv[i - 1] !== '--date' && cmd !== 'days') || opt('--date') || jst;
     let res;
-    if (cmd === 'status') res = status(data, today);
-    else if (cmd === 'size') res = size(data, Number(a[0]), Number(a[1]), a[2] || '通常', today);
-    else if (cmd === 'orders') { const o = orders(data, today); res = { new: o.new.map((x) => ({ 銘柄: x.t['銘柄名'], 買い: x.buy, 損切り: x.stop, note: x.note, expired: x.expired })), hold: o.hold.map((x) => ({ 銘柄: x.t['銘柄名'], 状態: x.state, 期限日: x.limit, 残り営業日: x.left, 注文: x.orders, 確認: x.checks })) }; }
-    else if (cmd === 'summary') res = summary(data);
-    else { console.error('usage: status|size|orders|summary'); process.exit(1); }
+    if (cmd === 'materials') res = materials(data, today, { code: opt('--code'), trade: opt('--trade'), industry: opt('--industry') });
+    else if (cmd === 'size') res = size({ entry: Number(argv[1]), stop: Number(argv[2]), oneR: Number(argv[3]), oneRCap: argv[4] != null ? Number(argv[4]) : null, perStockCap: argv[5] != null ? Number(argv[5]) : null, unit: data['前提']['単元'] });
+    else if (cmd === 'days') { const cal = makeCal(data['前提']['休日']); res = { from: argv[1], n: Number(argv[2]), date: iso(cal.workday(d(argv[1]), Number(argv[2]))) }; }
+    else if (cmd === 'stages') res = stages(data, today);
+    else if (cmd === 'summary') res = summary(data, today);
+    else { console.error('usage: materials|size|days|stages|summary'); process.exit(1); }
     console.log(JSON.stringify(res, null, 1));
   }
   return api;
