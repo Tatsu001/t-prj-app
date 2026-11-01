@@ -711,20 +711,25 @@ ${Object.entries(groups).map(([g, l]) => `<section>${sh(g)}<div class="rows">${l
       const s = { name: v.name.trim(), '状態': old ? old['状態'] : '代替案', '改定日': todayISO(), '区分': v['区分'] || '共通', '一言で': v['一言で'], '行': rows, 'しないこと': lines(v['しないこと']), '出典': v['出典'], '数値欄': {} };
       keys.forEach((k) => { s['数値欄'][k] = numOrNull(v['n:' + k]); });
       if (s['状態'] === '採用') { const dup = q['戦略'].find((x) => x !== old && x['状態'] === '採用' && (s['区分'] === '共通' || x['区分'] === '共通' || x['区分'] === s['区分'])); if (dup) { msg = { ng: true, text: `${dup.name} が${dup['区分'] === '共通' ? '' : dup['区分'] + 'の'}採用。採用は区分ごとに1つ` }; showToast(); return; } }
+      // 何も変わっていなければ保存も履歴も無し
+      const strip = (x) => JSON.stringify(Object.assign({}, x, { '改定日': null }));
+      if (old && strip(old) === strip(s)) { msg = { text: '変更なし' }; edit = null; render(); return; }
       if (old && old.name !== s.name) renameEverywhere(q, old.name, s.name);
       if (idx >= 0) q['戦略'][idx] = s; else q['戦略'].push(s);
-      // 改定履歴：行の追加・削除、条件変更、数値変更、文言変更
+      // 改定履歴：名前変更、行の追加・削除、条件変更、数値変更、文言変更（それ以外）
       const oldNames = (old ? old['行'] : []).map((r) => r['名前']), newNames = rows.map((r) => r['名前']);
       const added = newNames.filter((n) => !oldNames.includes(n)), removed = oldNames.filter((n) => !newNames.includes(n));
-      const condChanged = old && JSON.stringify(old['行'].map((r) => [r['名前'], r['条件'], r['適用範囲']])) !== JSON.stringify(rows.map((r) => [r['名前'], r['条件'], r['適用範囲']]));
+      const condOf = (r) => JSON.stringify([r['条件'], r['適用範囲'], r['時点']]);
+      const condChangedRows = old ? rows.filter((r) => oldNames.includes(r['名前']) && condOf(r) !== condOf(old['行'].find((x) => x['名前'] === r['名前']))).map((r) => r['名前']) : [];
       const entries = [];
       if (!old) entries.push(histEntry(q, s.name, '追加', '', s['状態'], v.reason));
       else {
+        if (old.name !== s.name) entries.push(histEntry(q, s.name, '名前変更', old.name, s.name, v.reason));
         if (added.length) entries.push(histEntry(q, s.name, '行の追加', '', added.join('、'), v.reason));
         if (removed.length) entries.push(histEntry(q, s.name, '行の削除', removed.join('、'), '', v.reason));
-        if (condChanged && !added.length && !removed.length) entries.push(histEntry(q, s.name, '条件変更', '', rows.filter((r, k) => JSON.stringify(r['条件']) !== JSON.stringify((old['行'].find((x) => x['名前'] === r['名前']) || {})['条件'])).map((r) => r['名前']).join('、'), v.reason));
+        if (condChangedRows.length) entries.push(histEntry(q, s.name, '条件変更', '', condChangedRows.join('、'), v.reason));
         if (JSON.stringify(old['数値欄']) !== JSON.stringify(s['数値欄'])) entries.push(histEntry(q, s.name, '数値変更', JSON.stringify(old['数値欄']), JSON.stringify(s['数値欄']), v.reason));
-        if (!entries.length) entries.push(histEntry(q, s.name, '文言変更', old['状態'], s['状態'], v.reason));
+        if (!entries.length) entries.push(histEntry(q, s.name, '文言変更', '', '', v.reason));
       }
       entries.forEach((h) => data['改定履歴'].push(h));
       // 影響：条件つきの行が増えた・名前が変わったら、確認済みの候補が確認待ちに戻る
