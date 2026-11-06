@@ -43,10 +43,10 @@
   // ---------- 問いの群と並び（属性から導く。番号は使わない） ----------
   // 群：対象が 戦略・人 なら「仕組み」、採用の単位が 口座で1つ なら「口座全体」、それ以外は「取引の流れ」
   // 並び：結果の語彙の順（1つの取引を上から下へ）。同じ結果なら番号順
-  const GROUPS = [['取引の流れ', '1つの取引を上から順に'], ['口座全体', '毎日、銘柄によらずかかる'], ['仕組み', '月末と、人がすること']];
-  const RESULT_ORDER = ['候補に入れる', '段階を進める', '可否', '注文を作る', '注文の形', '株数', '売り注文', '新規可否', '提案', '人の手順'];
-  const STEP = { '候補に入れる': '候補を出す', '段階を進める': '買ってよい銘柄か', '可否': '今日買うか', '注文を作る': '今日買うか', '注文の形': 'どう注文するか', '株数': 'いくら買うか', '売り注文': 'いつ売るか' };
-  const groupOf = (q) => (['戦略', '人'].includes(q['対象']) ? '仕組み' : q['採用の単位'] === '口座で1つ' ? '口座全体' : '取引の流れ');
+  const GROUPS = [['取引の流れ', '1つの取引を上から順に'], ['口座全体', '毎日、銘柄によらずかかる']];
+  const RESULT_ORDER = ['候補に入れる', '段階を進める', '注文を作る', '売り注文', '注文', '新規可否'];
+  const STEP = { '候補に入れる': '候補を出す', '段階を進める': '買ってよい銘柄か', '注文を作る': '今日買うか', '売り注文': 'いつ売るか', '注文': 'どう注文するか' };
+  const groupOf = (q) => (q['対象'] === '口座' ? '口座全体' : '取引の流れ');
   const stepOf = (q) => STEP[q['結果']] || '';
   const sortQuestions = (qs) => (qs || []).slice().sort((a, b) => (RESULT_ORDER.indexOf(a['結果']) - RESULT_ORDER.indexOf(b['結果'])) || (a.num - b.num));
 
@@ -93,12 +93,14 @@
   }
   // 候補の属性（適用範囲と採用の選択に使う）
   const heldNow = (code, trades) => (trades || []).some((t) => t['コード'] === code && OPEN.includes(state(t)));
-  const candAttrs = (c, trades) => ({ '区分': c['区分'], '市場区分': c['市場区分'] || null, '業種（33業種）': c['業種'] || null, '保有の有無': heldNow(c['コード'], trades) ? 'はい' : 'いいえ' });
+  // 適用範囲に使う属性：区分・市場区分・業種・保有の有無・型（建玉を作った戦略名。結果が「注文を作る」の問いの採用名）
+  const entryQ = (qs) => questionsBy(qs, (x) => x['対象'] === '銘柄' && x['結果'] === '注文を作る')[0] || null;
+  const candAttrs = (c, trades, qs) => { const eq = entryQ(qs); return { '区分': c['区分'], '市場区分': c['市場区分'] || null, '業種（33業種）': c['業種'] || null, '保有の有無': heldNow(c['コード'], trades) ? 'はい' : 'いいえ', '型': eq && c['使うルール'] ? ruleOf(c, eq.num) : null }; };
   function gateFor(questions, c, trades) {
     const q = questionsBy(questions, (x) => x['対象'] === '銘柄' && x['結果'] === '段階を進める')[0];
     if (!q) return null;
     const s = adoptedFor(q, c['区分']);
-    return { qnum: q.num, strategy: s ? s.name : null, names: condRows(s, candAttrs(c, trades)).map((r) => r['名前']) };
+    return { qnum: q.num, strategy: s ? s.name : null, names: condRows(s, candAttrs(c, trades, questions)).map((r) => r['名前']) };
   }
 
   // ---------- 口座の段階（口座.json の最新から） ----------
@@ -161,16 +163,17 @@
       out.bdays_since_last_loss = lastLoss ? cal.bdays(d(lastLoss), T) : 99999;
       // 銘柄の問いで建玉の材料を使う時は、その銘柄の保有中の建玉で解く
       const t = held.find((x) => x['コード'] === opts.code);
-      if (t) Object.assign(out, tradeMaterials(t, cal, T));
+      if (t) Object.assign(out, tradeMaterials(t, cal, T, data['問い']));
     }
     if (opts.trade != null) {
       const t = trades.find((x) => x.id === Number(opts.trade));
-      if (t) Object.assign(out, tradeMaterials(t, cal, T));
+      if (t) Object.assign(out, tradeMaterials(t, cal, T, data['問い']));
     }
     return out;
   }
-  function tradeMaterials(t, cal, T) {
-    return { bdays_held: t['約定日'] ? cal.bdays(d(t['約定日']), T) : null, bdays_since_order: t['記録日'] ? cal.bdays(d(t['記録日']), T) : null,
+  function tradeMaterials(t, cal, T, qs) {
+    const eq = entryQ(qs);
+    return { setup: eq ? ruleOf(t, eq.num) : null, bdays_held: t['約定日'] ? cal.bdays(d(t['約定日']), T) : null, bdays_since_order: t['記録日'] ? cal.bdays(d(t['記録日']), T) : null,
       partially_sold: yn(soldQty(t) > 0 && remQty(t) > 0), entry: t['約定価格'] || null, stop: t['損切り価格'] || null, rem: remQty(t) };
   }
   const r1 = (v) => Math.round(v * 10) / 10;
@@ -220,10 +223,11 @@
       out[q.num] = (q['戦略'] || []).map((s) => {
         const m = { name: s.name, state: s['状態'] };
         let ts = [], cs = [];
-        if (q['対象'] === '建玉' || q['結果'] === '注文を作る' || q['結果'] === '可否') ts = closed.filter((t) => ruleOf(t, q.num) === s.name);
+        // 口座で1つの問い（売り・注文・口座）は、採用の戦略に決済済みの全部が属する。取引ごと・区分ごとの問いは記録の使うルールで結びつく
+        if (q['採用の単位'] === '口座で1つ') ts = s['状態'] === '採用' ? closed : [];
+        else if (q['対象'] === '建玉' || q['結果'] === '注文を作る') ts = closed.filter((t) => ruleOf(t, q.num) === s.name);
         if (q['結果'] === '候補に入れる') cs = cands.filter((c) => c['戦略'] === s.name);
         if (q['結果'] === '段階を進める') cs = cands.filter((c) => c['判定の戦略'] === s.name);
-        if (['口座', '戦略', '人'].includes(q['対象'])) ts = s['状態'] === '採用' ? closed : [];
         const rs = ts.map(rValue);
         m.n = ts.length; m.winPct = pct(ts.filter((t) => pl(t) >= 0).length, ts.length); m.rAvg = avg(rs); m.rSum = rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) * 100) / 100 : null;
         const comp = ts.map((t) => ((t['遵守'] || {})[String(q.num)])).filter((v) => v === '○' || v === '×');
@@ -237,7 +241,7 @@
         m.sold_by_deadline = ts.filter((t) => t['売った理由'] === '期限').length;
         const rest = ts.filter((t) => (t['売り'] || []).length >= 2).map((t) => { const last = t['売り'][t['売り'].length - 1]; return (last['価格'] - t['約定価格']) / (t['約定価格'] - t['損切り価格']); });
         m.rest_over_1r_pct = pct(rest.filter((v) => v > 1).length, rest.length);
-        if (s['状態'] === '採用' && ['口座', '戦略', '人'].includes(q['対象'])) {
+        if (s['状態'] === '採用' && q['対象'] === '口座') {
           const mine = acct.filter((a) => (a['判定'] || []).some((j) => j['問い'] === q.num));
           m.blocked = acct.reduce((n, a) => n + ((a['見送り'] || []).filter((x) => x['問い'] === q.num).length), 0);
           m.blocked_days = mine.filter((a) => (a['判定'] || []).some((j) => j['問い'] === q.num && j['結果'] === (q['合成'] === 'どれか' ? '○' : '×'))).length;
@@ -250,7 +254,7 @@
           m.missed_runs = bds.filter((b) => !have.has(b)).length;
           m.unanswered_days = acct.filter((a) => month(a['日付']) && a['答えなし']).length;
         }
-        if (q['結果'] === '可否' || q['結果'] === '新規可否') m.blocked = m.blocked != null ? m.blocked : acct.reduce((n, a) => n + ((a['見送り'] || []).filter((x) => x['問い'] === q.num).length), 0);
+        if (q['結果'] === '新規可否') m.blocked = m.blocked != null ? m.blocked : acct.reduce((n, a) => n + ((a['見送り'] || []).filter((x) => x['問い'] === q.num).length), 0);
         return m;
       });
     });

@@ -16,6 +16,7 @@
     ['IPO', [['docs/01_IPOの全体像.md', 'IPOの全体像'], ['docs/02_公開価格の決まり方.md', '公開価格の決まり方'], ['docs/03_初値の決まり方.md', '初値の決まり方'], ['docs/04_機関投資家とVCの動き.md', '機関投資家とVCの動き'], ['docs/05_初値後の値動き.md', '初値後の値動き'], ['docs/06_情報源の読み方.md', '情報源の読み方']]],
     ['用語', [['docs/07_用語集.md', '用語集']]],
     ['知見者', [['references/テスタ氏X投稿_株式投資の知見まとめ_2016-2026.md', 'テスタ（X投稿 2016–2026）'], ['references/ミネルヴィニ_成長株投資法_知見まとめ.md', 'ミネルヴィニ『成長株投資法』'], ['references/ミネルヴィニ_株式トレード基本と原則_知見まとめ.md', 'ミネルヴィニ『株式トレード 基本と原則』'], ['references/ティアー_バフェットとソロス_知見まとめ.md', 'ティアー『バフェットとソロス 勝利の投資学』']]],
+    ['運用', [['routine/人の手順.md', '人の手順（寄付前・昼・引け後・週末・月末、例外の扱い）']]],
     ['ノートの設計', [['設計案_判定方式.md', '完成像（判定方式）'], ['rules/00_前提.md', '前提（兼業・現物・小資金）'], ['rules/04_テスタ知見との対応表.md', 'テスタ知見との対応表']]],
   ];
   const DOC_LIST = DOCS.flatMap(([, l]) => l);
@@ -88,7 +89,7 @@
   const TABS = [['today', '今日'], ['trades', '取引'], ['rules', 'ルール'], ['docs', '知識']];
   const tabOf = (r) => ({ today: 'today', trades: 'trades', trade: 'trades', cand: 'trades', rules: 'rules', rule: 'rules', materials: 'rules', docs: 'docs', changes: 'today', settings: 'today' }[r] || 'today');
   const shell = (body) => { const cur = tabOf(route()[0]); return body + '<nav class="tabs">' + TABS.map(([k, n]) => `<a href="#${k}" class="${cur === k ? 'on' : ''}">${n}</a>`).join('') + '</nav>'; };
-  const pill = (st) => `<span class="pill ${['採用', '保有中', '一部利確', 'ウォッチ中', '判断できる', '可', '○'].includes(st) ? 'pill-ok' : ['不採用', '見送り', '取消', '不可', '×', '停止'].includes(st) ? 'pill-ng' : ['注文中', '確認待ち', '提案', '未', '新規停止'].includes(st) ? 'pill-warn' : st === '型が出た' ? 'pill-acc' : ''}">${E(st)}</span>`;
+  const pill = (st) => `<span class="pill ${['採用', '保有中', '一部利確', 'ウォッチ中', '可', '○'].includes(st) ? 'pill-ok' : ['不採用', '見送り', '取消', '不可', '×', '停止'].includes(st) ? 'pill-ng' : ['注文中', '確認待ち', '提案', '未', '新規停止'].includes(st) ? 'pill-warn' : st === '型が出た' ? 'pill-acc' : ''}">${E(st)}</span>`;
   const mark = (v) => (v === '○' ? '<span class="pill pill-ok">○</span>' : v === '×' ? '<span class="pill pill-ng">×</span>' : '<span class="pill">未</span>');
   const who = (j) => (j ? `<span class="pill who">${E(j)}</span>` : '');
   const sh = (t, sub) => `<h2 class="sh">${E(t)}${sub ? `<small>${E(sub)}</small>` : ''}</h2>`;
@@ -128,17 +129,21 @@
   const qScreen = () => qOne((q) => q['対象'] === '銘柄' && q['結果'] === '候補に入れる');
   const qSell = () => qWhere((q) => q['対象'] === '建玉' && q['結果'] === '売り注文');
   const qGates = () => qWhere((q) => q['対象'] === '口座' && q['結果'] === '新規可否');
-  const perTradeQs = () => qWhere((q) => q['対象'] === '建玉' || ['注文を作る', '可否'].includes(q['結果']));
+  // 取引ごとに記録に残る戦略は「型」（結果が 注文を作る の問い）だけ。売り・注文・口座の問いは口座で1つ
+  const perTradeQs = () => qWhere((q) => q['結果'] === '注文を作る');
   const adoptedText = (q) => q['戦略'].filter((s) => s['状態'] === '採用').map((s) => (s['区分'] === '共通' ? '' : s['区分'] + '：') + s.name).join(' ／ ') || '—';
   const slist = (q) => q['戦略'].filter((s) => s['状態'] !== '不採用').map((s) => s.name);
   // 材料
   const MAT = () => data['材料'] || [];
   const matItem = (k) => MAT().find((m) => m.key === k);
   const isPick = (k) => ((matItem(k) || {})['種類'] === '選択');
-  const ALLOWED = { '銘柄': ['銘柄', '建玉', '暦', '指数'], '建玉': ['建玉', '銘柄', '暦', '指数', '口座'], '口座': ['口座', '指数', '暦', '銘柄'], '戦略': ['戦略'], '人': [] };
+  const ALLOWED = { '銘柄': ['銘柄', '建玉', '暦', '指数'], '建玉': ['建玉', '銘柄', '暦', '指数', '口座'], '口座': ['口座', '指数', '暦', '銘柄', '建玉'] };
   const matNums = (obj) => MAT().filter((m) => m['種類'] !== '資料' && (ALLOWED[obj] || []).includes(m['対象']));
   const matDocs = () => MAT().filter((m) => m['種類'] === '資料');
-  const scopeItems = () => MAT().filter((m) => m['種類'] === '選択' && m['対象'] === '銘柄');
+  // 適用範囲に使える項目：銘柄の属性（区分・市場区分・業種・保有の有無）。建玉の問いでは型も
+  const scopeItems = (obj) => MAT().filter((m) => m['属性'] && (m['対象'] === '銘柄' || (obj === '建玉' && m['対象'] === '建玉')));
+  // 選択肢。「選択肢の出どころ」がある材料（型）は、その結果の問いの戦略名
+  const matChoices = (m) => (m && m['選択肢の出どころ'] ? qWhere((q) => q['結果'] === m['選択肢の出どころ']['結果']).flatMap((q) => q['戦略'].map((s) => s.name)) : (m && m['選択肢']) || []);
   // 暦と口座
   const cal = () => Calc.makeCal((data['前提'] || {})['休日']);
   const prevBd = (today) => { const c = cal(); return c.workday(new Date(today + 'T00:00:00Z'), -1).toISOString().slice(0, 10); };
@@ -147,7 +152,7 @@
   // 候補の段階と行
   const gateFor = (c) => Calc.gateFor(QS(), c, data['取引']);
   const candStage = (c) => Calc.candStage(c, gateFor(c), data['取引']);
-  const candRowsOf = (c) => { const q = qGate(); if (!q) return { q: null, s: null, rows: [] }; const s = Calc.adoptedFor(q, c['区分']); return { q, s, rows: Calc.rowsFor(s, Calc.candAttrs(c, data['取引'])) }; };
+  const candRowsOf = (c) => { const q = qGate(); if (!q) return { q: null, s: null, rows: [] }; const s = Calc.adoptedFor(q, c['区分']); return { q, s, rows: Calc.rowsFor(s, Calc.candAttrs(c, data['取引'], QS())) }; };
   const cstate = (t) => Calc.state(t);
   const condText = (r, s) => { const c = r['条件']; if (!c) return '常に'; if (c['判定'] === '計算') { const m = matItem(c['項目']) || {}; const v = fill(Array.isArray(c['値']) ? c['値'].join('・') : String(c['値']), s); return `${c['項目']} が ${v}${m['種類'] === '選択' ? '' : (m['単位'] || '') + c['比較']}`; } return fill(c['文'], s) + (c['見るもの'] && c['見るもの'].length ? `<small class="see">${E(c['見るもの'].join('・'))}</small>` : ''); };
   const scopeText = (r) => ((r['時点'] || []).length ? ['時点 ' + r['時点'].join('・')] : []).concat((r['適用範囲'] || []).map((a) => `${a['項目']} ${(Array.isArray(a['値']) ? a['値'] : [a['値']]).join('・')}`)).join('、');
@@ -186,7 +191,7 @@ ${full ? `<dl class="gates">${gates.map((j) => `<div class="${bad(j) ? 'bad' : '
     return held.map((t) => {
       const s = cstate(t), rem = Calc.remQty(t);
       const rules = perTradeQs().filter((q) => Calc.ruleOf(t, q.num)).map((q) => `<a href="#rule/${q.num}/${encodeURIComponent(Calc.ruleOf(t, q.num))}">${E(Calc.ruleOf(t, q.num))}</a>`).join('・');
-      const js = sq.flatMap((q) => { const st = Calc.byName(q, Calc.ruleOf(t, q.num)) || Calc.adoptedFor(q, t['区分']); return Calc.condRows(st, Calc.candAttrs(t)).map((r) => ({ q, r, j: Calc.latest(t['判定'], q.num, r['名前']) })); });
+      const js = sq.flatMap((q) => { const st = Calc.byName(q, Calc.ruleOf(t, q.num)) || Calc.adoptedFor(q, t['区分']); return Calc.condRows(st, Calc.candAttrs(t, data['取引'], QS())).map((r) => ({ q, r, j: Calc.latest(t['判定'], q.num, r['名前']) })); });
       return `<article class="hold"><header><div>${stock(t)}<span class="sub">${E(t['区分'])}${rules ? '・' + rules : ''}</span></div>${pill(s)}</header>
 <dl><div><dt>約定 ${E(dShort(t['約定日']))}</dt><dd>${yen(t['約定価格'])}円</dd></div><div><dt>損切り</dt><dd>${yen(t['損切り価格'])}円</dd></div><div><dt>残株数</dt><dd>${rem}株</dd></div><div><dt>期限</dt><dd>${t['期限日'] ? E(dShort(t['期限日'])) : '—'}</dd></div></dl>
 ${full ? `${t['次の行動'] ? `<p class="ai">次の行動　${E(t['次の行動'])}</p>` : ''}<h4>売る条件<small>当たった行の行動を取る</small></h4><div class="jrows">${js.map(({ r, j }) => `<div class="jrow"><span>${E(r['名前'])}</span>${mark(j ? j['結果'] : '未')}${who((r['条件'] || {})['判定'])}${j && j['根拠'] ? `<p>${E(j['根拠'])}</p>` : ''}</div>`).join('') || '<p class="empty">行なし</p>'}</div>` : ''}</article>`;
@@ -208,7 +213,7 @@ ${full ? `${t['次の行動'] ? `<p class="ai">次の行動　${E(t['次の行�
     const gq = qGate();
     (data['候補'] || []).forEach((c, i) => { const st = candStage(c); if (!['仮判定中', '確認待ち'].includes(st) || !gq) return; const { rows } = candRowsOf(c); rows.forEach((r) => { const cnd = r['条件']; if (cnd && cnd['判定'] === '人') { const j = Calc.latest(c['判定'], gq.num, r['名前']); if (!j || j['結果'] === '未') out.push({ kind: 'cand', i, q: gq.num, name: r['名前'], label: `候補 ${c['銘柄名']}`, text: fill(cnd['文'], candRowsOf(c).s) }); } }); });
     const sq = qSell();
-    (data['取引'] || []).forEach((t, i) => { if (!['保有中', '一部利確'].includes(cstate(t))) return; sq.forEach((q) => { const st = Calc.byName(q, Calc.ruleOf(t, q.num)) || Calc.adoptedFor(q, t['区分']); Calc.condRows(st, Calc.candAttrs(t)).forEach((r) => { if (r['条件']['判定'] === '人') { const j = Calc.latest(t['判定'], q.num, r['名前']); if (!j || j['結果'] === '未') out.push({ kind: 'trade', i, q: q.num, name: r['名前'], label: `保有 ${t['銘柄名']}`, text: fill(r['条件']['文'], st) }); } }); }); });
+    (data['取引'] || []).forEach((t, i) => { if (!['保有中', '一部利確'].includes(cstate(t))) return; sq.forEach((q) => { const st = Calc.byName(q, Calc.ruleOf(t, q.num)) || Calc.adoptedFor(q, t['区分']); Calc.condRows(st, Calc.candAttrs(t, data['取引'], QS())).forEach((r) => { if (r['条件']['判定'] === '人') { const j = Calc.latest(t['判定'], q.num, r['名前']); if (!j || j['結果'] === '未') out.push({ kind: 'trade', i, q: q.num, name: r['名前'], label: `保有 ${t['銘柄名']}`, text: fill(r['条件']['文'], st) }); } }); }); });
     return out;
   }
   const humanAsk = (h) => `<li>${E(h.label)}：${E(h.text)}<span class="btns inline"><button class="b small" data-act="judge-${h.kind}" data-i="${h.i}" data-q="${h.q}" data-name="${E(h.name)}" data-v="○">○</button><button class="b small quiet" data-act="judge-${h.kind}" data-i="${h.i}" data-q="${h.q}" data-name="${E(h.name)}" data-v="×">×</button></span></li>`;
@@ -314,7 +319,7 @@ ${sec(`決済済み ${closed.length}`, closed)}${other.length ? sec('取消', ot
   // 判定の行（候補・建玉で同じ見せ方）。人の行で未のものは直接○×を押せる
   function judgeRows(rec, q, strat, actKind, idx) {
     if (!q || !strat) return '<p class="empty">採用の戦略が無い</p>';
-    const rows = Calc.rowsFor(strat, Calc.candAttrs(rec, data['取引']));
+    const rows = Calc.rowsFor(strat, Calc.candAttrs(rec, data['取引'], QS()));
     const js = (rec['判定'] || []).filter((j) => j && j['問い'] === q.num);
     return `<div class="c4">${rows.map((r) => {
       const c = r['条件'];
@@ -335,7 +340,7 @@ ${sec(`決済済み ${closed.length}`, closed)}${other.length ? sec('取消', ot
     const sellCards = qSell().map((q) => { const st = Calc.byName(q, Calc.ruleOf(t, q.num)) || Calc.adoptedFor(q, t['区分']); return card(`${E(q.name)}<small>${E(st ? st.name : '')}</small>`, judgeRows(t, q, st, 'trade', i)); }).join('');
     return shell(`<h1>${E(t['銘柄名'] || '取引')} ${pill(s)}</h1>
 ${card('銘柄', `<p>${E(t['コード'])} ${E(t['銘柄名'])}　${E(t['区分'])}${t['市場区分'] ? '・' + E(t['市場区分']) : ''}${t['業種'] ? '・' + E(t['業種']) : ''}</p>`)}
-${card('使うルール', `<p>${rules || '—'}</p>`)}
+${card('型', `<p>${rules || '—'}</p>`)}
 ${card('発注', facts([['基準価格', yen(t['基準価格']) + '円'], ['損切り価格', yen(t['損切り価格']) + '円'], ['発注価格', yen(t['発注価格']) + '円'], ['株数', (t['株数'] || 0) + '株']]), `型が出た日 ${dShort(t['記録日'])}`)}
 ${t['約定日'] ? card('約定', facts([['約定日', E(dShort(t['約定日']))], ['約定価格', yen(t['約定価格']) + '円'], ['約定株数', t['約定株数'] + '株']])) : card('約定', '<p class="empty">まだ</p>')}
 ${holding || t['期限日'] || t['イベント日'] ? card('期限', facts([['期限日', t['期限日'] ? E(dShort(t['期限日'])) : '—'], ['イベント', t['イベント日'] ? `${E(t['イベント種別'] || '')} ${E(dShort(t['イベント日']))}` : null]])) : ''}
@@ -355,14 +360,14 @@ ${t['その後'] ? card('その後', `<p>${E(dShort(t['その後']['日付']))} 
     const ruleOfOrAdopted = (q) => Calc.ruleOf(t, q.num) || (i < 0 ? ((Calc.adoptedFor(q, t['区分']) || {}).name || '') : '');
     const rules = perTradeQs().map((q) => fld(q.name, 'rule:' + q.num, ruleOfOrAdopted(q), { type: 'select', options: [''].concat(slist(q)) })).join('');
     const ruleSum = perTradeQs().map((q) => ruleOfOrAdopted(q)).filter(Boolean).join('・');
-    const qOrder = qOne((q) => q['対象'] === '建玉' && q['結果'] === '注文の形');
-    const intro = i < 0 ? `<p class="note lead">普段は、引け後にAIが型の判定から注文を作ってここに足します。一覧と違う注文を出した時や、引け後の作業が動かなかった日だけ、ここで足してください。使うルールは採用のものを入れてあります。</p>` : '';
+    const qOrder = qOne((q) => q['対象'] === '建玉' && q['結果'] === '注文');
+    const intro = i < 0 ? `<p class="note lead">普段は、引け後にAIが型の判定から注文を作ってここに足します。一覧と違う注文を出した時や、引け後の作業が動かなかった日だけ、ここで足してください。型は採用のものを入れてあります。</p>` : '';
     const a = acct(todayISO());
     const evSel = `<label class="f span"><span>イベント</span><select name="イベント種別">${[['', '—'], ['決算', '決算発表'], ['解除', 'ロックアップ解除'], ['権利', '権利付き最終日']].map(([v, l]) => `<option value="${v}" ${(t['イベント種別'] || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
     return shell(`<h1>${i >= 0 ? E(t['銘柄名'] || '取引') : '取引を追加'}${s ? ' ' + pill(s) : ''}</h1>
 <form id="f-trade" data-i="${i}">${intro}
-${grp('銘柄', !s, fld('コード', 'コード', t['コード']) + fld('銘柄名', '銘柄名', t['銘柄名']) + fld('区分', '区分', t['区分'], { type: 'select', options: ['通常', 'IPO'] }) + fld('市場区分', '市場区分', t['市場区分'], { type: 'select', options: ['', 'プライム', 'スタンダード', 'グロース'] }) + fld('業種（33業種）', '業種', t['業種'], { type: 'select', options: [''].concat(((matItem('業種（33業種）') || {})['選択肢']) || []) }), s ? `${t['コード']} ${t['銘柄名']}　${t['区分']}` : '')}
-${grp('使うルール', false, rules, ruleSum)}
+${grp('銘柄', !s, fld('コード', 'コード', t['コード']) + fld('銘柄名', '銘柄名', t['銘柄名']) + fld('区分', '区分', t['区分'], { type: 'select', options: ['通常', 'IPO'] }) + fld('市場区分', '市場区分', t['市場区分'], { type: 'select', options: ['', 'プライム', 'スタンダード', 'グロース'] }) + fld('業種（33業種）', '業種', t['業種'], { type: 'select', options: [''].concat(matChoices(matItem('業種（33業種）'))) }), s ? `${t['コード']} ${t['銘柄名']}　${t['区分']}` : '')}
+${grp('型', false, rules, ruleSum)}
 ${grp('発注', !s || s === '注文中', fld('型が出た日', '記録日', t['記録日'], { type: 'date' }) + fld('基準価格', '基準価格', t['基準価格'], { type: 'number' }) + fld('損切り価格', '損切り価格', t['損切り価格'], { type: 'number' }) + fld('発注価格', '発注価格', t['発注価格'], { type: 'number', note: `${qOrder ? qOrder.name : '注文の形'} のルールどおり` }) + fld('株数', '株数', t['株数'], { type: 'number' }) + `<div class="btns span"><button class="b" data-act="calc-trade" type="button">株数を計算</button><small class="note">${a && a['1R額'] ? `1R ${yen(a['1R額'])}円（${dShort(a['日付'])} の口座の記録）` : '口座の記録に1R額が無い（引け後の作業で入る）'}</small></div>${calcBox ? `<div class="span">${calcBox}</div>` : ''}` + (s === '注文中' || s === '取消' ? `<label class="chk span"><input type="checkbox" name="取消" ${t['状態'] === '取消' ? 'checked' : ''}> この注文を取消にする</label>` : ''), s && s !== '注文中' ? `${dShort(t['記録日'])}　${yen(t['発注価格'])}円 × ${t['株数']}株　損切り ${yen(t['損切り価格'])}円` : '')}
 ${grp('約定', s === '注文中', fld('約定日', '約定日', t['約定日'], { type: 'date' }) + fld('約定価格', '約定価格', t['約定価格'], { type: 'number' }) + fld('約定株数', '約定株数', t['約定株数'], { type: 'number' }), holding || s === '決済済み' ? `${dShort(t['約定日'])}　${yen(t['約定価格'])}円 × ${t['約定株数']}株` : '')}
 ${grp('期限', holding, fld('期限日', '期限日', t['期限日'], { type: 'date', note: 'AIが保有期限のルールから書く' }) + fld('イベント日', 'イベント日', t['イベント日'], { type: 'date' }) + evSel, holding ? `${t['期限日'] ? dShort(t['期限日']) : ''}${t['イベント日'] ? `　${t['イベント種別'] || ''} ${dShort(t['イベント日'])}` : ''}` : '')}
@@ -403,7 +408,7 @@ ${c['その後'] ? card('その後', `<p>${E(dShort(c['その後']['日付']))} 
     const typed = c['型が出た日'] ? `<p class="ai">型が出た ${E(dShort(c['型が出た日']))}${trade ? `　<a href="#trade/${data['取引'].indexOf(trade)}">取引 ${E(cstate(trade))}</a>` : ''}</p>` : '';
     return shell(`<h1>${!isNew ? E(c['銘柄名'] || '候補銘柄') + ' ' + pill(candStage(c)) : '候補銘柄を追加'}</h1>
 <form id="f-cand" data-i="${i}">
-${grp('銘柄', isNew, fld('候補に入った日', '日付', c['日付'], { type: 'date' }) + fld('コード', 'コード', c['コード']) + fld('銘柄名', '銘柄名', c['銘柄名']) + fld('区分', '区分', c['区分'], { type: 'select', options: ['通常', 'IPO'] }) + fld('市場区分', '市場区分', c['市場区分'], { type: 'select', options: ['', 'プライム', 'スタンダード', 'グロース'] }) + fld('業種（33業種）', '業種', c['業種'], { type: 'select', options: [''].concat(((matItem('業種（33業種）') || {})['選択肢']) || []) }) + fld('上場日（IPO）', '上場日', c['上場日'], { type: 'date' }), isNew ? '' : `${c['コード']} ${c['銘柄名']}　${c['区分']}`)}
+${grp('銘柄', isNew, fld('候補に入った日', '日付', c['日付'], { type: 'date' }) + fld('コード', 'コード', c['コード']) + fld('銘柄名', '銘柄名', c['銘柄名']) + fld('区分', '区分', c['区分'], { type: 'select', options: ['通常', 'IPO'] }) + fld('市場区分', '市場区分', c['市場区分'], { type: 'select', options: ['', 'プライム', 'スタンダード', 'グロース'] }) + fld('業種（33業種）', '業種', c['業種'], { type: 'select', options: [''].concat(matChoices(matItem('業種（33業種）'))) }) + fld('上場日（IPO）', '上場日', c['上場日'], { type: 'date' }), isNew ? '' : `${c['コード']} ${c['銘柄名']}　${c['区分']}`)}
 ${grp('スクリーニング', isNew, fld('売買代金（億円・10日平均）', '売買代金_億', c['売買代金_億'], { type: 'number', step: '0.1' }) + fld('時価総額（億円）', '時価総額_億', c['時価総額_億'], { type: 'number' }) + fld('終値', '終値', c['終値'], { type: 'number' }) + fld('絞り込み', '絞り込み', c['絞り込み'], { ph: '可 か 不可：理由。空欄は可' }), isNew ? '' : `${dShort(c['日付'])}　${c['絞り込み'] || '—'}`)}
 ${grp(`${E(q ? q.name : '判定')}<small>${E(s ? s.name : '')}。直すと「人」の判定として残る</small>`, true, (cond || '<p class="empty span">採用の戦略に条件の行が無い</p>') + `<label class="chk span"><input type="checkbox" name="確認" ${c['確認'] ? 'checked' : ''}> 根拠を読んで確認した${c['確認'] ? `　${E(dShort(c['確認']))}` : ''}</label>`)}
 <input type="hidden" name="型が出た日" value="${E(c['型が出た日'] || '')}">${typed}
@@ -441,10 +446,10 @@ ${grp(`${E(q ? q.name : '判定')}<small>${E(s ? s.name : '')}。直すと「人
     const kdText = Object.entries(kd).filter(([k]) => k !== '既定').map(([k, c]) => `${k}＝${c['項目']}が${fmtNum(c['値'])}${(matItem(c['項目']) || {})['単位'] || ''}${c['比較']}`).join('、') + (kd['既定'] ? `、それ以外は${kd['既定']}` : '');
     const evText = (pre['イベント暦'] || []).map((e) => (typeof e === 'string' ? e : `${e['日付']} ${e['名前'] || ''}`.trim())).join('\n');
     const preForm = edit && edit.type === 'premise' ? `<form id="f-premise" class="form cols">${fld('初期資金（円）', '初期資金', pre['初期資金'], { type: 'number' })}${fld('月初資金（円）', '月初資金', pre['月初資金'], { type: 'number' })}${fld('停止残高（円）', '停止残高', pre['停止残高'], { type: 'number' })}${fld('単元（株）', '単元', pre['単元'], { type: 'number' })}${fld('証券会社', '証券会社', pre['証券会社'])}<label class="f span"><span>イベント暦（1行1件：日付 名前。FOMC・日銀会合・米雇用統計など。年1回入れる）</span><textarea name="イベント暦" rows="6">${E(evText)}</textarea></label><label class="f span"><span>東証の休業日（1行1日）</span><textarea name="休日" rows="6">${E(pre['休日'].join('\n'))}</textarea></label><div class="btns span"><button class="b primary" data-act="save-premise">保存</button><button class="b quiet" data-act="cancel" type="button">取消</button></div></form>`
-      : facts([['初期資金', yen(pre['初期資金']) + '円'], ['月初資金（1Rの基準）', yen(pre['月初資金']) + '円'], ['停止残高', yen(pre['停止残高']) + '円'], ['単元', pre['単元'] + '株'], ['証券会社', E(pre['証券会社'])], ['休業日', pre['休日'].length + '日'], ['区分の定義', E(kdText || '—'), true], ['イベント暦', `${(pre['イベント暦'] || []).length}件${(pre['イベント暦'] || []).length ? `　次 ${E((pre['イベント暦'].map((e) => (typeof e === 'string' ? { '日付': e } : e)).filter((e) => e['日付'] >= todayISO()).sort((x, y) => (x['日付'] < y['日付'] ? -1 : 1))[0] || {})['日付'] ? dShort(pre['イベント暦'].map((e) => (typeof e === 'string' ? { '日付': e } : e)).filter((e) => e['日付'] >= todayISO()).sort((x, y) => (x['日付'] < y['日付'] ? -1 : 1))[0]['日付']) : '—')}` : ''}`, true]]) + `<div class="btns"><button class="b quiet" data-act="edit-premise">編集</button></div>`;
+      : facts([['初期資金', yen(pre['初期資金']) + '円'], ['月初資金（1Rの基準）', yen(pre['月初資金']) + '円'], ['停止残高', yen(pre['停止残高']) + '円'], ['単元', pre['単元'] + '株'], ['証券会社', E(pre['証券会社'])], ['休業日', pre['休日'].length + '日'], ['区分の定義', E(kdText || '—'), true], ['見直しの決まり', E(fill((pre['見直しの決まり'] || {})['説明'] || '', { '数値欄': pre['見直しの決まり'] || {} })), true], ['イベント暦', `${(pre['イベント暦'] || []).length}件${(pre['イベント暦'] || []).length ? `　次 ${E((pre['イベント暦'].map((e) => (typeof e === 'string' ? { '日付': e } : e)).filter((e) => e['日付'] >= todayISO()).sort((x, y) => (x['日付'] < y['日付'] ? -1 : 1))[0] || {})['日付'] ? dShort(pre['イベント暦'].map((e) => (typeof e === 'string' ? { '日付': e } : e)).filter((e) => e['日付'] >= todayISO()).sort((x, y) => (x['日付'] < y['日付'] ? -1 : 1))[0]['日付']) : '—')}` : ''}`, true]]) + `<div class="btns"><button class="b quiet" data-act="edit-premise">編集</button></div>`;
     const hist = data['改定履歴'].slice().reverse();
     return shell(`<h1>ルール</h1>
-<section>${sh('13項目', '採用している戦略')}${list}</section>
+<section>${sh('10項目', '採用している戦略')}${list}</section>
 <section><div class="bar"><h2>原則</h2>${pEdit ? '<button class="b quiet" data-act="cancel">閉じる</button>' : '<button class="b quiet" data-act="edit-principles">編集</button>'}</div>${principles}</section>
 <section><h2>前提</h2>${preForm}</section>
 <section><div class="rows"><a class="row" href="#materials"><div class="r1"><b>材料の一覧</b></div><div class="r2">条件に使える数字と、AIが読む資料。道具が出せるものだけ</div><span class="chev">›</span></a></div></section>
@@ -542,7 +547,7 @@ ${perf}<p class="rev">${s['出典'] ? `出典　${linkify(s['出典'])}　` : ''
       if (judge === '計算') {
         const item = c['項目'] || '';
         const m = matItem(item) || {};
-        cond = `<label class="f"><span>項目</span><select name="r${k}_項目">${opts(item, items)}</select></label>` + (isPick(item) ? `<div class="f"><span>当てはまるもの（複数可）</span><div class="picks">${(m['選択肢'] || []).map((o) => `<label class="chk"><input type="checkbox" name="r${k}_選択" value="${E(o)}" ${(Array.isArray(c['値']) ? c['値'] : [c['値']]).includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div></div>`
+        cond = `<label class="f"><span>項目</span><select name="r${k}_項目">${opts(item, items)}</select></label>` + (isPick(item) ? `<div class="f"><span>当てはまるもの（複数可）</span><div class="picks">${matChoices(m).map((o) => `<label class="chk"><input type="checkbox" name="r${k}_選択" value="${E(o)}" ${(Array.isArray(c['値']) ? c['値'] : [c['値']]).includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div></div>`
           : `<div class="form cols"><label class="f"><span>比較</span><select name="r${k}_比較">${CMPS.map((x) => `<option ${c['比較'] === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label><label class="f"><span>値${m['単位'] ? `（${E(m['単位'])}）` : ''}<small>数字か {キー}</small></span><input name="r${k}_値" value="${E(Array.isArray(c['値']) ? '' : (c['値'] == null ? '' : c['値']))}"></label></div>`);
       } else if (judge === 'AI') {
         cond = `<label class="f span"><span>文（AIが読んで決める）</span><textarea name="r${k}_文" rows="2">${E(c['文'] || '')}</textarea></label><div class="f span"><span>見るもの</span><div class="picks">${matDocs().map((m) => `<label class="chk"><input type="checkbox" name="r${k}_見るもの" value="${E(m.key)}" ${(c['見るもの'] || []).includes(m.key) ? 'checked' : ''}> ${E(m.key)}</label>`).join('')}</div></div>`;
@@ -554,7 +559,7 @@ ${perf}<p class="rev">${s['出典'] ? `出典　${linkify(s['出典'])}　` : ''
       const isOpen = (edit && edit.openRows ? edit.openRows : []).includes(k) || !r['名前'];
       return `<details class="grp rowed" data-r="${k}" ${isOpen ? 'open' : ''}><summary><span class="t">${E(r['名前'] || '（名前なし）')}${who(judge)}</span><span class="sum">${summaryText}</span></summary><div class="form cols"><label class="f"><span>名前<small>短く。変えない</small></span><input name="r${k}_名前" value="${E(r['名前'] || '')}"></label><label class="f"><span>判定</span><select name="r${k}_判定" class="rjudge">${['計算', 'AI', '人', 'なし'].map((x) => `<option ${judge === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>${cond}
 <label class="f span"><span>行動<small>当たった時に何をするか。数字は {キー}</small></span><textarea name="r${k}_行動" rows="2">${E(r['行動'] || '')}</textarea></label>
-<details class="fold span"><summary>時点と適用範囲${(r['時点'] || []).length || scv.length ? `：${E(scopeText(r))}` : '（問いの時点ぜんぶ・対象ぜんぶ）'}</summary><div class="f"><span>いつ見るか<small>空なら問いの時点ぜんぶ</small></span><div class="picks">${(q['時点'] || []).map((tp) => `<label class="chk"><input type="checkbox" name="r${k}_時点" value="${E(tp)}" ${(r['時点'] || []).includes(tp) ? 'checked' : ''}> ${E(tp)}</label>`).join('')}</div></div><label class="f"><span>対象の属性で絞る</span><select name="r${k}_適用項目" class="rscope">${opts(sc['項目'] || '', scopeItems())}</select></label>${sc['項目'] ? `<div class="picks">${((matItem(sc['項目']) || {})['選択肢'] || []).map((o) => `<label class="chk"><input type="checkbox" name="r${k}_適用値" value="${E(o)}" ${scv.includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div>` : ''}</details>
+<details class="fold span"><summary>時点と適用範囲${(r['時点'] || []).length || scv.length ? `：${E(scopeText(r))}` : '（問いの時点ぜんぶ・対象ぜんぶ）'}</summary><div class="f"><span>いつ見るか<small>空なら問いの時点ぜんぶ</small></span><div class="picks">${(q['時点'] || []).map((tp) => `<label class="chk"><input type="checkbox" name="r${k}_時点" value="${E(tp)}" ${(r['時点'] || []).includes(tp) ? 'checked' : ''}> ${E(tp)}</label>`).join('')}</div></div><label class="f"><span>対象の属性で絞る</span><select name="r${k}_適用項目" class="rscope">${opts(sc['項目'] || '', scopeItems(q['対象']))}</select></label>${sc['項目'] ? `<div class="picks">${(matChoices(matItem(sc['項目'])) || []).map((o) => `<label class="chk"><input type="checkbox" name="r${k}_適用値" value="${E(o)}" ${scv.includes(o) ? 'checked' : ''}> ${E(o)}</label>`).join('')}</div>` : ''}</details>
 <div class="btns span"><button type="button" class="b quiet small" data-act="up-row" data-r="${k}">上へ</button><button type="button" class="b quiet small danger" data-act="del-row" data-r="${k}">この行を消す</button></div></div></details>`;
     };
     return `<h4>行<small>${E(COMP_SUB[q['合成']] || '')}</small></h4><details class="fold"><summary>条件と行動の書き方</summary><p class="note">文を「〜なら、〜する」にする。「〜なら」が条件（○×で答えられる。材料で言えれば計算、資料を読むならAI、人にしか分からなければ人）、「〜する」が行動。いつもすることは条件なし。いつ見るかは時点、どの銘柄かは適用範囲</p></details>${(rows.length ? rows : [{ '名前': '', '適用範囲': null, '時点': null, '条件': { '判定': '計算' }, '行動': null }]).map(one).join('')}<div class="btns"><button type="button" class="b" data-act="add-row">行を足す</button></div>`;
