@@ -606,7 +606,7 @@ ${fld('改定の理由（改定履歴に残る）', 'reason', d.reason || '')}
     MAT().forEach((m) => { const g = `${m['対象']}／${m['出どころ']}`; (groups[g] = groups[g] || []).push(m); });
     const idx = `<div class="seg wrap">${Object.keys(groups).map((g) => `<a href="#materials/${encodeURIComponent(g)}">${E(g.replace('／', ' '))}</a>`).join('')}</div>`;
     return shell(`<h1>材料の一覧</h1><p class="lead">条件に使える数字と、AIが読む資料。道具が出せるものだけ</p>${idx}
-${Object.entries(groups).map(([g, l]) => `<section id="m-${E(g)}">${sh(g)}<div class="rows">${l.map((m) => `<div class="row"><div class="r1"><b>${E(m.key)}</b>${m['単位'] ? `<span class="pill">${E(m['単位'])}</span>` : ''}${m['種類'] === '資料' ? pill('資料') : m['種類'] === '選択' ? `<span class="pill">${E((m['選択肢'] || []).slice(0, 4).join('・'))}${(m['選択肢'] || []).length > 4 ? '…' : ''}</span>` : ''}</div><div class="r2">${E(m['説明'] || '')}</div></div>`).join('')}</div></section>`).join('')}`);
+${Object.entries(groups).map(([g, l]) => `<section id="m-${E(g)}">${sh(g)}<div class="rows">${l.map((m) => `<div class="row"><div class="r1"><b>${E(m.key)}</b>${m['単位'] ? `<span class="pill">${E(m['単位'])}</span>` : ''}${m['種類'] === '資料' ? pill('資料') : m['種類'] === '選択' ? `<span class="pill">${E(matChoices(m).slice(0, 4).join('・'))}${matChoices(m).length > 4 ? '…' : ''}</span>` : ''}</div><div class="r2">${E(m['説明'] || '')}</div></div>`).join('')}</div></section>`).join('')}`);
   }
 
   // ---------- 知識 ----------
