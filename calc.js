@@ -39,6 +39,17 @@
   const rowsFor = (strategy, attrs) => (strategy ? (strategy['行'] || []) : []).filter((r) => inScope(r, attrs));
   const condRows = (strategy, attrs) => rowsFor(strategy, attrs).filter((r) => r['条件']);
 
+
+  // ---------- 問いの群と並び（属性から導く。番号は使わない） ----------
+  // 群：対象が 戦略・人 なら「仕組み」、採用の単位が 口座で1つ なら「口座全体」、それ以外は「取引の流れ」
+  // 並び：結果の語彙の順（1つの取引を上から下へ）。同じ結果なら番号順
+  const GROUPS = [['取引の流れ', '1つの取引を上から順に'], ['口座全体', '毎日、銘柄によらずかかる'], ['仕組み', '月末と、人がすること']];
+  const RESULT_ORDER = ['候補に入れる', '段階を進める', '可否', '注文を作る', '注文の形', '株数', '売り注文', '新規可否', '提案', '人の手順'];
+  const STEP = { '候補に入れる': '候補を出す', '段階を進める': '買ってよい銘柄か', '可否': '今日買うか', '注文を作る': '今日買うか', '注文の形': 'どう注文するか', '株数': 'いくら買うか', '売り注文': 'いつ売るか' };
+  const groupOf = (q) => (['戦略', '人'].includes(q['対象']) ? '仕組み' : q['採用の単位'] === '口座で1つ' ? '口座全体' : '取引の流れ');
+  const stepOf = (q) => STEP[q['結果']] || '';
+  const sortQuestions = (qs) => (qs || []).slice().sort((a, b) => (RESULT_ORDER.indexOf(a['結果']) - RESULT_ORDER.indexOf(b['結果'])) || (a.num - b.num));
+
   // ---------- 判定の記録 ----------
   // 同じ（問い・条件）に複数あれば最後が有効。人が直した時もAIの分は残る
   const latest = (list, qnum, name) => { let hit = null; (list || []).forEach((j) => { if (j && typeof j === 'object' && j['問い'] === qnum && j['条件'] === name) hit = j; }); return hit; };
@@ -61,22 +72,33 @@
 
   // ---------- 銘柄（候補）の段階 ----------
   // gate：対象が銘柄で結果が「段階を進める」問い。requiredNames：採用戦略の条件つきの行の名前
-  function candStage(c, gate) {
+  // 候補の段階。型が出た日が入っていれば取引の状態で決まる：続いていれば「型が出た」、取消なら「ウォッチ中」に戻る、決済済みなら「終了」
+  //（終了した銘柄は、次にスクリーニングを通った時に新しい候補として入り直す）
+  const OPEN = ['注文中', '保有中', '一部利確'];
+  function candStage(c, gate, trades) {
     if (c['絞り込み'] && c['絞り込み'] !== '可') return '見送り';
     const js = (c['判定'] || []).filter((j) => j && typeof j === 'object');
     if (!gate) return js.some((j) => j['根拠']) ? '確認待ち' : '仮判定中';
     const rs = results(js, gate.qnum, gate.names);
     if (rs.includes('×')) return '見送り';
-    if (gate.names.length && rs.every((r) => r === '○') && c['確認']) return c['型が出た日'] ? '型が出た' : 'ウォッチ中';
+    if (gate.names.length && rs.every((r) => r === '○') && c['確認']) {
+      if (!c['型が出た日']) return 'ウォッチ中';
+      const ts = (trades || []).filter((t) => t['コード'] === c['コード']);
+      if (!ts.length) return 'ウォッチ中';
+      if (ts.some((t) => OPEN.includes(state(t)))) return '型が出た';
+      const last = ts.slice().sort((a, b) => String(a['記録日'] || '').localeCompare(String(b['記録日'] || ''))).slice(-1)[0];
+      return state(last) === '取消' ? 'ウォッチ中' : '終了';
+    }
     return js.some((j) => j['問い'] === gate.qnum && (j['根拠'] || j['結果'] === '○' || j['結果'] === '×')) ? '確認待ち' : '仮判定中';
   }
   // 候補の属性（適用範囲と採用の選択に使う）
-  const candAttrs = (c) => ({ '区分': c['区分'], '市場区分': c['市場区分'] || null, '業種（33業種）': c['業種'] || null });
-  function gateFor(questions, c) {
+  const heldNow = (code, trades) => (trades || []).some((t) => t['コード'] === code && OPEN.includes(state(t)));
+  const candAttrs = (c, trades) => ({ '区分': c['区分'], '市場区分': c['市場区分'] || null, '業種（33業種）': c['業種'] || null, '保有の有無': heldNow(c['コード'], trades) ? 'はい' : 'いいえ' });
+  function gateFor(questions, c, trades) {
     const q = questionsBy(questions, (x) => x['対象'] === '銘柄' && x['結果'] === '段階を進める')[0];
     if (!q) return null;
     const s = adoptedFor(q, c['区分']);
-    return { qnum: q.num, strategy: s ? s.name : null, names: condRows(s, candAttrs(c)).map((r) => r['名前']) };
+    return { qnum: q.num, strategy: s ? s.name : null, names: condRows(s, candAttrs(c, trades)).map((r) => r['名前']) };
   }
 
   // ---------- 口座の段階（口座.json の最新から） ----------
@@ -133,6 +155,7 @@
       const live = held.concat(waiting);
       const ind = opts.industry || ((data['候補'] || []).find((c) => c['コード'] === opts.code) || {})['業種'] || null;
       out.same_code_held = live.filter((t) => t['コード'] === opts.code).length;
+      out.held_now = yn(out.same_code_held > 0);
       out.same_industry_held = ind ? live.filter((t) => t['コード'] !== opts.code && t['業種'] === ind).length : 0;
       const lastLoss = closed.filter((x) => x.t['コード'] === opts.code && x.pl < 0).map((x) => x.c).sort().slice(-1)[0] || null;
       out.bdays_since_last_loss = lastLoss ? cal.bdays(d(lastLoss), T) : 99999;
@@ -170,7 +193,7 @@
   function stages(data, today) {
     const qs = data['問い'];
     return {
-      候補: (data['候補'] || []).map((c) => ({ コード: c['コード'], 銘柄名: c['銘柄名'], 段階: candStage(c, gateFor(qs, c)) })),
+      候補: (data['候補'] || []).map((c) => ({ コード: c['コード'], 銘柄名: c['銘柄名'], 段階: candStage(c, gateFor(qs, c, data['取引']), data['取引']) })),
       取引: (data['取引'] || []).map((t) => ({ id: t.id, 銘柄名: t['銘柄名'], 段階: state(t) })),
       口座: accountStage(data['口座'], today),
     };
@@ -235,7 +258,7 @@
   }
 
   const api = { makeCal, questionsBy, adoptedFor, byName, inScope, rowsFor, condRows, latest, results, compose, pl, soldQty, remQty, state, closeDate, rValue, ruleOf,
-    candStage, candAttrs, gateFor, latestAccount, accountStage, materials, size, stages, summary };
+    candStage, candAttrs, heldNow, gateFor, latestAccount, accountStage, materials, size, stages, summary, GROUPS, RESULT_ORDER, groupOf, stepOf, sortQuestions };
 
   if (typeof module === 'object' && module.exports && typeof require === 'function' && require.main === module) {
     const fs = require('fs'), path = require('path');
