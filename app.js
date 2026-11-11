@@ -126,6 +126,7 @@ async function loadQueue() {
   const rows = await Promise.all(files.filter(f => f.name.endsWith(".json")).map(f => Store.json(f.path).then(x => x && x.data).catch(() => null)));
   S.queue = rows.filter(Boolean).sort((a, b) => String(a.日時).localeCompare(String(b.日時)));
   const ql = await Store.json("data/記録/入力の取り込み.json").catch(() => null); S.qlog = ql ? ql.data : [];
+  const lk = await Store.json("data/記録/実行中.json").catch(() => null); S.lock = lk ? lk.data : null;   // 定期実行が判定を回している間だけある
 }
 async function loadStrategy(force) {
   if (S.strat && !force) return;
@@ -410,7 +411,16 @@ function morningHTML(v) {
   const body = trial ? `${orderListHTML(rows)}<div class="actions"><button class="btn" data-act="confirm-am" data-date="${D}">手順どおりで確認</button></div>` : `<p class="lead">取消・訂正・寄成を SBI で出す。出せなかった注文だけチェックを外す</p>${orderListHTML(rows)}${placeBody(rows, D, A).replace("置けなかった注文だけチェックを外す", "出せなかった注文だけチェックを外す")}`;
   return html + `<section><div class="steps-h"><h2>朝の手順</h2><span class="meta num">0 / 1</span></div><ol class="steps-l">${step(1, trial ? "変更を確認する" : "SBI で出す", "cur", body, `${rows.length}件`)}</ol></section>`;
 }
+function runningLock() {   // 判定を回している最中か（印が古ければ、止まった実行の残りとみなす）
+  const l = S.lock; if (!l || !l.開始) return null;
+  const ttl = Number((S.pre || {})["実行中の印の有効時間（分）"] || 90);
+  const age = (nowDate() - new Date(l.開始)) / 60000;
+  return age >= 0 && age < ttl ? l : null;
+}
 function todayHTML() {
+  const lk = runningLock();
+  if (lk) return head(`${md(lk.日付)}<span>${lk.判定点 === H ? "引け後" : "寄付前"}</span>`, `判定中 · ${hm(lk.開始)} 開始`) + commonAlerts(null) + acctLine()
+    + empty("今日の判定を回しています", `いつもは${lk.判定点 === H ? "40" : "10"}分ほどで終わります。終わると、ここに${lk.判定点 === H ? "今夜" : "朝"}の手順が出ます`);
   const v = decideView();
   if (v.kind === "evening") return eveningHTML(v);
   if (v.kind === "morning") return morningHTML(v);
@@ -871,6 +881,7 @@ async function testConn() {
 const TABS = [["今日", "today"], ["持ち高", "hold"], ["戦略", "strat"], ["記録", "log"], ["知識", "know"], ["設定", "conf"]];
 function routeOf() { const h = decodeURIComponent(location.hash.slice(1) || "today"); const [tab, ...rest] = h.split("/"); const base = tab.replace(/-.*$/, ""); return { tab: TABS.some(x => x[1] === base) ? base : "today", page: tab, arg: rest.join("/") }; }
 function todayTodo() {
+  if (runningLock()) return false;
   try { const v = decideView(); if (v.kind === "evening") { const E = eveningState(v); return (!E.conf && E.rows.length) || (!E.trial && E.cands.length && !E.fillDone); }
     if (v.kind === "morning") { const R = v.run; return (R.注文一覧 || []).length && (!R.人の最終確認 || R.人の最終確認.結果 === "未") && !queued("最終確認", c => c.日付 === v.date && c.判定点 === A).length; } } catch (e) {}
   return false;
